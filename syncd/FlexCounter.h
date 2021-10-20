@@ -220,7 +220,7 @@ namespace syncd
             void updateSupportedPriorityGroupCounters(
                     _In_ sai_object_id_t priorityGroupRid,
                     _In_ const std::vector<sai_ingress_priority_group_stat_t> &counterIds);
-        
+
             void updateSupportedFlowCounters(
                     _In_ sai_object_id_t counterRid,
                     _In_ const std::vector<sai_counter_stat_t> &counterIds);
@@ -328,7 +328,7 @@ namespace syncd
                 FlowCounterIds(
                         _In_ sai_object_id_t counterId,
                         _In_ const std::vector<sai_counter_stat_t> &flowCounterIds);
-                
+
                 sai_object_id_t counterId;
                 std::vector<sai_counter_stat_t> flowCounterIds;
             };

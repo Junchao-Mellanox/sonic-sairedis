@@ -783,7 +783,7 @@ void FlexCounter::removeFlowCounter(
     swss::RedisPipeline pipeline(&db);
     swss::Table countersTable(&pipeline, COUNTERS_TABLE, false);
     swss::Table ratesTable(&pipeline, RATES_TABLE, false);
-    
+
     // Remove counter and rate entries from COUNTER DB to avoid resource leak
     std::string counterVidStr = sai_serialize_object_id(counterVid);
     countersTable.del(counterVidStr);
