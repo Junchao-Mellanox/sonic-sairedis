@@ -15,22 +15,6 @@ extern "C" {
 #include <memory>
 #include <type_traits>
 
-#define COUNTER_TYPE_PORT "Port Counter"
-#define COUNTER_TYPE_PORT_DEBUG "Port Debug Counter"
-#define COUNTER_TYPE_QUEUE "Queue Counter"
-#define COUNTER_TYPE_PG "Priority Group Counter"
-#define COUNTER_TYPE_RIF "Rif Counter"
-#define COUNTER_TYPE_SWITCH_DEBUG "Switch Debug Counter"
-#define COUNTER_TYPE_MACSEC_FLOW "MACSEC Flow Counter"
-#define COUNTER_TYPE_MACSEC_SA "MACSEC SA Counter"
-#define COUNTER_TYPE_FLOW "Flow Counter"
-#define COUNTER_TYPE_TUNNEL "Tunnel Counter"
-#define COUNTER_TYPE_BUFFER_POOL "Buffer Pool Counter"
-#define ATTR_TYPE_QUEUE "Queue Attribute"
-#define ATTR_TYPE_PG "Priority Group Attribute"
-#define ATTR_TYPE_MACSEC_SA "MACSEC SA Attribute"
-#define ATTR_TYPE_ACL_COUNTER "ACL Counter Attribute"
-
 namespace syncd
 {
     class BaseCounterContext

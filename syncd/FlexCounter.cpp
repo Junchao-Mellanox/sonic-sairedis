@@ -15,6 +15,22 @@ using namespace std;
 #define MUTEX std::unique_lock<std::mutex> _lock(m_mtx);
 #define MUTEX_UNLOCK _lock.unlock();
 
+static const std::string COUNTER_TYPE_PORT = "Port Counter";
+static const std::string COUNTER_TYPE_PORT_DEBUG = "Port Debug Counter";
+static const std::string COUNTER_TYPE_QUEUE = "Queue Counter";
+static const std::string COUNTER_TYPE_PG = "Priority Group Counter";
+static const std::string COUNTER_TYPE_RIF = "Rif Counter";
+static const std::string COUNTER_TYPE_SWITCH_DEBUG = "Switch Debug Counter";
+static const std::string COUNTER_TYPE_MACSEC_FLOW = "MACSEC Flow Counter";
+static const std::string COUNTER_TYPE_MACSEC_SA = "MACSEC SA Counter";
+static const std::string COUNTER_TYPE_FLOW = "Flow Counter";
+static const std::string COUNTER_TYPE_TUNNEL = "Tunnel Counter";
+static const std::string COUNTER_TYPE_BUFFER_POOL = "Buffer Pool Counter";
+static const std::string ATTR_TYPE_QUEUE = "Queue Attribute";
+static const std::string ATTR_TYPE_PG = "Priority Group Attribute";
+static const std::string ATTR_TYPE_MACSEC_SA = "MACSEC SA Attribute";
+static const std::string ATTR_TYPE_ACL_COUNTER = "ACL Counter Attribute";
+
 BaseCounterContext::BaseCounterContext(const std::string &name):
 m_name(name)
 {}
@@ -198,7 +214,7 @@ public:
         {
             const auto &vid = kv.first;
             const auto &rid = kv.second->rid;
-            const auto statIds = kv.second->counter_ids;
+            const auto &statIds = kv.second->counter_ids;
 
             if constexpr (HasStatsMode<CounterIdsType>::value)
             {
@@ -236,8 +252,8 @@ public:
                         std::back_inserter(idStrings),
                         [] (auto &kv) { return sai_serialize_object_id(kv.first); });
         std::for_each(m_plugins.begin(),
-                        m_plugins.end(), 
-                        [&] (auto &sha) { runRedisScript(counters_db, sha, idStrings, argv); });
+                      m_plugins.end(), 
+                      [&] (auto &sha) { runRedisScript(counters_db, sha, idStrings, argv); });
         
     }
 
@@ -552,33 +568,6 @@ public:
             _In_ sai_stats_mode_t &stats_mode):
     CounterContext<AttrType>(name, object_type, vendor_sai, stats_mode)
     {}
-
-    void deserializeAttr(const std::string& name, AttrType &attr)
-    {
-        if constexpr (std::is_same<AttrType, sai_queue_attr_t>::value)
-        {
-            sai_deserialize_queue_attr(name, attr);
-            return;
-        }
-
-        if constexpr (std::is_same<AttrType, sai_ingress_priority_group_attr_t>::value)
-        {
-            sai_deserialize_ingress_priority_group_attr(name, attr);
-            return;
-        }
-
-        if constexpr (std::is_same<AttrType, sai_macsec_sa_attr_t>::value)
-        {
-            sai_deserialize_macsec_sa_attr(name, attr);
-            return;
-        }
-
-        if constexpr (std::is_same<AttrType, sai_acl_counter_attr_t>::value)
-        {
-            sai_deserialize_acl_counter_attr(name, attr);
-            return;
-        }
-    }
     
     void addObject(
             _In_ sai_object_id_t vid,
@@ -617,7 +606,7 @@ public:
         {
             const auto &vid = kv.first;
             const auto &rid = kv.second->rid;
-            const auto attrIds = kv.second->counter_ids;
+            const auto &attrIds = kv.second->counter_ids;
 
             std::vector<sai_attribute_t> attrs(attrIds.size());
             for (size_t i = 0; i < attrIds.size(); i++)
@@ -650,6 +639,34 @@ public:
                 values.emplace_back(meta->attridname, sai_serialize_attr_value(*meta, attrs[i]));
             }
             countersTable.set(sai_serialize_object_id(vid), values, "");
+        }
+    }
+
+private:
+    void deserializeAttr(const std::string& name, AttrType &attr)
+    {
+        if constexpr (std::is_same<AttrType, sai_queue_attr_t>::value)
+        {
+            sai_deserialize_queue_attr(name, attr);
+            return;
+        }
+
+        if constexpr (std::is_same<AttrType, sai_ingress_priority_group_attr_t>::value)
+        {
+            sai_deserialize_ingress_priority_group_attr(name, attr);
+            return;
+        }
+
+        if constexpr (std::is_same<AttrType, sai_macsec_sa_attr_t>::value)
+        {
+            sai_deserialize_macsec_sa_attr(name, attr);
+            return;
+        }
+
+        if constexpr (std::is_same<AttrType, sai_acl_counter_attr_t>::value)
+        {
+            sai_deserialize_acl_counter_attr(name, attr);
+            return;
         }
     }
 };
@@ -736,12 +753,12 @@ void FlexCounter::removeDataFromCountersDB(
     swss::DBConnector db(m_dbCounters, 0);
     swss::RedisPipeline pipeline(&db);
     swss::Table countersTable(&pipeline, COUNTERS_TABLE, false);
-    swss::Table ratesTable(&pipeline, RATES_TABLE, false);
-
+    
     std::string vidStr = sai_serialize_object_id(vid);
     countersTable.del(vidStr);
     if (!ratePrefix.empty())
     {
+        swss::Table ratesTable(&pipeline, RATES_TABLE, false);
         ratesTable.del(vidStr);
         ratesTable.del(vidStr + ratePrefix);
     }
@@ -1344,8 +1361,6 @@ void FlexCounter::addCounter(
                     rid, 
                     idStrings,
                     "");
-
-            
         }
         else if (objectType == SAI_OBJECT_TYPE_ACL_COUNTER && field == ACL_COUNTER_ATTR_ID_LIST)
         {
