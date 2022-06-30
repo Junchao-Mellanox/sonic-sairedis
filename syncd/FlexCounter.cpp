@@ -91,14 +91,14 @@ struct HasStatsMode
 
 // BulkStatsContext is used to store bulk counter related
 // data and avoid construct them each time calling SAI bulk API
+template <typename StatType>
 struct BulkStatsContext
 {
     std::vector<sai_object_id_t> object_vids;
     std::vector<sai_object_key_t> object_keys; 
-    std::vector<sai_stat_id_t> counter_ids;
+    std::vector<StatType> counter_ids;
     std::vector<sai_status_t> object_statuses;
     std::vector<uint64_t> counters;
-    std::vector<sai_stat_capability_t> stats_capas;
 };
 
 template <typename StatType>
@@ -106,6 +106,7 @@ class CounterContext : public BaseCounterContext
 {
 public:
     typedef CounterIds<StatType> CounterIdsType;
+    typedef BulkStatsContext<StatType> BulkContextType;
 
     CounterContext(
             _In_ const std::string &name,
@@ -185,7 +186,7 @@ public:
         }
 
         // Perform a remove and re-add to simplify the logic here
-        removeObject(vid);
+        removeObject(vid, false);
 
         bool supportBulk;
         if constexpr (HasStatsMode<CounterIdsType>::value)
@@ -215,8 +216,16 @@ public:
     }
 
     void removeObject(
+            _In_ sai_object_id_t vid) override
+    {
+        SWSS_LOG_ENTER();
+
+        removeObject(vid, true);
+    }
+
+    void removeObject(
             _In_ sai_object_id_t vid,
-            _In_ bool log = true) override
+            _In_ bool log)
     {
         SWSS_LOG_ENTER();
 
@@ -269,10 +278,7 @@ public:
 
         for (const auto &kv : m_bulkContexts)
         {
-            if (!bulkCollectData(countersTable, *kv.second.get()))
-            {
-                continue;
-            }
+            bulkCollectData(countersTable, *kv.second.get());
         }
     }
 
@@ -298,7 +304,7 @@ public:
 
     bool hasObject() const override
     {
-        return !m_objectIdsMap.empty() && !m_bulkContexts.empty();
+        return !m_objectIdsMap.empty() || !m_bulkContexts.empty();
     }
 
 private:
@@ -443,7 +449,7 @@ private:
                         m_objectType,
                         rid,
                         static_cast<uint32_t>(counter_ids.size()),
-                        reinterpret_cast<const sai_stat_id_t *>(counter_ids.data()));
+                        (const sai_stat_id_t *)counter_ids.data());
                 if (status != SAI_STATUS_SUCCESS)
                 {
                     if (log_err)
@@ -492,17 +498,18 @@ private:
 
     void bulkCollectData(
         _In_ swss::Table &countersTable,
-        _Inout_ BulkStatsContext &ctx)
+        _Inout_ BulkContextType &ctx)
     {
         SWSS_LOG_ENTER();
+        auto statsMode = m_groupStatsMode == SAI_STATS_MODE_READ ? SAI_STATS_MODE_BULK_READ : SAI_STATS_MODE_BULK_READ_AND_CLEAR;
         sai_status_t status = m_vendorSai->bulkGetStats(
                             SAI_NULL_OBJECT_ID,
                             m_objectType,
                             static_cast<uint32_t>(ctx.object_keys.size()),
                             ctx.object_keys.data(),
                             static_cast<uint32_t>(ctx.counter_ids.size()),
-                            ctx.counter_ids.data(),
-                            m_groupStatsMode,
+                            reinterpret_cast<const sai_stat_id_t *>(ctx.counter_ids.data()),
+                            statsMode,
                             ctx.object_statuses.data(),
                             ctx.counters.data());
         if (SAI_STATUS_SUCCESS != status)
@@ -513,9 +520,9 @@ private:
         std::vector<swss::FieldValueTuple> values;
         for (size_t i = 0; i < ctx.object_keys.size(); i++)
         {
-            if (SAI_STATUS_SUCCESS != ctx.object_status[i])
+            if (SAI_STATUS_SUCCESS != ctx.object_statuses[i])
             {
-                SWSS_LOG_ERROR("Failed to get stats of %s 0x%" PRIx64 ": %d", m_name.c_str(), ctx.object_keys[i].key.object_id, ctx.object_status[i]);
+                SWSS_LOG_ERROR("Failed to get stats of %s 0x%" PRIx64 ": %d", m_name.c_str(), ctx.object_keys[i].key.object_id, ctx.object_statuses[i]);
                 continue;
             }
             const auto &vid = ctx.object_vids[i];
@@ -530,7 +537,7 @@ private:
     }
 
     auto getBulkStatsContext(
-        _In_ const std::vector<sai_stat_id_t>& counterIds)
+        _In_ const std::vector<StatType>& counterIds)
     {
         auto iter = m_bulkContexts.find(counterIds);
         if (iter != m_bulkContexts.end())
@@ -538,15 +545,15 @@ private:
             return iter->second;
         }
 
-        auto ret = m_bulkContexts.emplace(counterIds, std::make_shared<BulkStatsContext>());
+        auto ret = m_bulkContexts.emplace(counterIds, std::make_shared<BulkContextType>());
         return ret.first->second;
     }
 
     void addBulkStatsContext(
             _In_    sai_object_id_t vid,
             _In_    sai_object_id_t rid,
-            _In_    const std::vector<sai_stat_id_t>& counterIds,
-            _Inout_ BulkStatsContext &ctx)
+            _In_    const std::vector<StatType>& counterIds,
+            _Inout_ BulkContextType &ctx)
     {
         SWSS_LOG_ENTER();
         ctx.object_vids.push_back(vid);
@@ -568,7 +575,7 @@ private:
         bool found = false;
         for (auto iter = m_bulkContexts.begin(); iter != m_bulkContexts.end(); iter++)
         {
-            auto &ctx = iter->second;
+            auto &ctx = *iter->second.get();
             auto vid_iter = std::find(ctx.object_vids.begin(), ctx.object_vids.end(), vid);
             if (vid_iter == ctx.object_vids.end())
             {
@@ -598,19 +605,20 @@ private:
     bool checkBulkCapability(
             _In_ sai_object_id_t vid,
             _In_ sai_object_id_t rid,
-            _In_ const std::vector<StatType> counter_ids)
+            _In_ const std::vector<StatType>& counter_ids)
     {
         SWSS_LOG_ENTER();
-        BulkStatsContext ctx;
+        BulkContextType ctx;
         addBulkStatsContext(vid, rid, counter_ids, ctx);
+        auto statsMode = m_groupStatsMode == SAI_STATS_MODE_READ ? SAI_STATS_MODE_BULK_READ : SAI_STATS_MODE_BULK_READ_AND_CLEAR;
         sai_status_t status = m_vendorSai->bulkGetStats(
                             SAI_NULL_OBJECT_ID,
                             m_objectType,
                             static_cast<uint32_t>(ctx.object_keys.size()),
                             ctx.object_keys.data(),
                             static_cast<uint32_t>(ctx.counter_ids.size()),
-                            ctx.counter_ids.data(),
-                            m_groupStatsMode,
+                            reinterpret_cast<const sai_stat_id_t *>(ctx.counter_ids.data()),
+                            statsMode,
                             ctx.object_statuses.data(),
                             ctx.counters.data());
         return status == SAI_STATUS_SUCCESS;
@@ -707,7 +715,7 @@ private:
             {
                 continue;
             }
-            
+
             m_supportedCounters.insert(counter);
         }
     }
@@ -718,9 +726,7 @@ protected:
     sai_stats_mode_t& m_groupStatsMode;
     std::set<StatType> m_supportedCounters;
     std::map<sai_object_id_t, std::shared_ptr<CounterIdsType>> m_objectIdsMap;
-
-private:
-    std::map<std::vector<StatType>, std::shared_ptr<BulkCounterContext>> m_bulkContexts; 
+    std::map<std::vector<StatType>, std::shared_ptr<BulkContextType>> m_bulkContexts; 
 };
 
 template <typename AttrType>

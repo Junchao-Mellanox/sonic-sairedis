@@ -34,9 +34,10 @@ std::string toOid(T value)
 
 std::shared_ptr<MockableSaiInterface> sai(new MockableSaiInterface());
 typedef std::function<void(swss::Table &countersTable, const std::string& key, const std::vector<std::string>& counterIdNames, const std::vector<std::string>& expectedValues)> VerifyStatsFunc;
+extern const std::vector<sai_object_id_t> *p_os;
 
 void testAddRemoveCounter(
-        sai_object_id_t object_id,
+        const std::vector<sai_object_id_t>& object_ids,
         sai_object_type_t object_type,
         const std::string& counterIdFieldName,
         const std::vector<std::string>& counterIdNames,
@@ -51,19 +52,17 @@ void testAddRemoveCounter(
 
     std::vector<swss::FieldValueTuple> values;
     values.emplace_back(POLL_INTERVAL_FIELD, "1000");
-    fc.addCounterPlugin(values);
-
-    values.clear();
     values.emplace_back(FLEX_COUNTER_STATUS_FIELD, "enable");
-    fc.addCounterPlugin(values);
-
-    values.clear();
     values.emplace_back(STATS_MODE_FIELD, statsMode);
     fc.addCounterPlugin(values);
-
+    
     values.clear();
     values.emplace_back(counterIdFieldName, join(counterIdNames));
-    fc.addCounter(object_id, object_id, values);
+    for (auto object_id : object_ids)
+    {
+        fc.addCounter(object_id, object_id, values);
+    }
+
     EXPECT_EQ(fc.isEmpty(), false);
 
     usleep(1000*1050);
@@ -71,21 +70,25 @@ void testAddRemoveCounter(
     swss::RedisPipeline pipeline(&db);
     swss::Table countersTable(&pipeline, COUNTERS_TABLE, false);
 
-    std::string expectedKey = toOid(object_id);
     std::vector<std::string> keys;
     countersTable.getKeys(keys);
-    EXPECT_EQ(keys.size(), size_t(1));
-    EXPECT_EQ(keys[0], expectedKey);
+    EXPECT_EQ(keys.size(), object_ids.size());
 
-    verifyFunc(countersTable, expectedKey, counterIdNames, expectedValues);
-
-    fc.removeCounter(object_id);
-    EXPECT_EQ(fc.isEmpty(), true);
-
-    if (!autoRemoveDbEntry)
+    for (size_t i = 0; i < object_ids.size(); i++)
     {
-        countersTable.del(expectedKey);
+        std::string expectedKey = toOid(object_ids[i]);
+        verifyFunc(countersTable, expectedKey, counterIdNames, expectedValues);
     }
+    
+    for (auto object_id : object_ids)
+    {
+        fc.removeCounter(object_id);
+        if (!autoRemoveDbEntry)
+        {
+            countersTable.del(toOid(object_id));
+        }
+    }
+    EXPECT_EQ(fc.isEmpty(), true);
 
     countersTable.getKeys(keys);
     ASSERT_TRUE(keys.empty());
@@ -112,6 +115,11 @@ TEST(FlexCounter, addRemoveCounter)
         return SAI_STATUS_FAILURE;
     };
 
+    sai->mock_bulkGetStats = [](sai_object_id_t, sai_object_type_t, uint32_t, const sai_object_key_t *, uint32_t, const sai_stat_id_t *, sai_stats_mode_t, sai_status_t *, uint64_t *)
+    {
+        return SAI_STATUS_FAILURE;
+    };
+
     auto counterVerifyFunc = [] (swss::Table &countersTable, const std::string& key, const std::vector<std::string>& counterIdNames, const std::vector<std::string>& expectedValues)
     {
         std::string value;
@@ -123,7 +131,7 @@ TEST(FlexCounter, addRemoveCounter)
     };
 
     testAddRemoveCounter(
-        sai_object_id_t(100),
+        {sai_object_id_t(100)},
         SAI_OBJECT_TYPE_COUNTER, 
         FLOW_COUNTER_ID_LIST,
         {"SAI_COUNTER_STAT_PACKETS", "SAI_COUNTER_STAT_BYTES"},
@@ -132,7 +140,7 @@ TEST(FlexCounter, addRemoveCounter)
         true);
 
     testAddRemoveCounter(
-        sai_object_id_t(101),
+        {sai_object_id_t(101)},
         SAI_OBJECT_TYPE_MACSEC_FLOW, 
         MACSEC_FLOW_COUNTER_ID_LIST,
         {"SAI_MACSEC_FLOW_STAT_CONTROL_PKTS", "SAI_MACSEC_FLOW_STAT_PKTS_UNTAGGED"},
@@ -141,7 +149,7 @@ TEST(FlexCounter, addRemoveCounter)
         false);
     
     testAddRemoveCounter(
-        sai_object_id_t(102),
+        {sai_object_id_t(102)},
         SAI_OBJECT_TYPE_MACSEC_SA, 
         MACSEC_SA_COUNTER_ID_LIST,
         {"SAI_MACSEC_SA_STAT_OCTETS_ENCRYPTED", "SAI_MACSEC_SA_STAT_OCTETS_PROTECTED"},
@@ -150,7 +158,7 @@ TEST(FlexCounter, addRemoveCounter)
         false);
 
     testAddRemoveCounter(
-        sai_object_id_t(103),
+        {sai_object_id_t(103)},
         SAI_OBJECT_TYPE_PORT, 
         PORT_COUNTER_ID_LIST,
         {"SAI_PORT_STAT_IF_IN_OCTETS", "SAI_PORT_STAT_IF_IN_UCAST_PKTS"},
@@ -159,7 +167,7 @@ TEST(FlexCounter, addRemoveCounter)
         false);
 
     testAddRemoveCounter(
-        sai_object_id_t(104),
+        {sai_object_id_t(104)},
         SAI_OBJECT_TYPE_PORT, 
         PORT_DEBUG_COUNTER_ID_LIST,
         {"SAI_PORT_STAT_IN_CONFIGURED_DROP_REASONS_0_DROPPED_PKTS", "SAI_PORT_STAT_IN_CONFIGURED_DROP_REASONS_1_DROPPED_PKTS"},
@@ -174,7 +182,7 @@ TEST(FlexCounter, addRemoveCounter)
     };
 
     testAddRemoveCounter(
-        sai_object_id_t(105),
+        {sai_object_id_t(105)},
         SAI_OBJECT_TYPE_QUEUE, 
         QUEUE_COUNTER_ID_LIST,
         {"SAI_QUEUE_STAT_PACKETS", "SAI_QUEUE_STAT_BYTES"},
@@ -185,7 +193,7 @@ TEST(FlexCounter, addRemoveCounter)
     EXPECT_EQ(true, clearCalled);
 
     testAddRemoveCounter(
-        sai_object_id_t(106),
+        {sai_object_id_t(106)},
         SAI_OBJECT_TYPE_INGRESS_PRIORITY_GROUP, 
         PG_COUNTER_ID_LIST,
         {"SAI_INGRESS_PRIORITY_GROUP_STAT_PACKETS", "SAI_INGRESS_PRIORITY_GROUP_STAT_BYTES"},
@@ -194,7 +202,7 @@ TEST(FlexCounter, addRemoveCounter)
         false);
 
     testAddRemoveCounter(
-        sai_object_id_t(107),
+        {sai_object_id_t(107)},
         SAI_OBJECT_TYPE_ROUTER_INTERFACE, 
         RIF_COUNTER_ID_LIST,
         {"SAI_ROUTER_INTERFACE_STAT_IN_OCTETS", "SAI_ROUTER_INTERFACE_STAT_IN_PACKETS"},
@@ -203,7 +211,7 @@ TEST(FlexCounter, addRemoveCounter)
         false);
 
     testAddRemoveCounter(
-        sai_object_id_t(108),
+        {sai_object_id_t(108)},
         SAI_OBJECT_TYPE_SWITCH, 
         SWITCH_DEBUG_COUNTER_ID_LIST,
         {"SAI_SWITCH_STAT_IN_CONFIGURED_DROP_REASONS_0_DROPPED_PKTS", "SAI_SWITCH_STAT_IN_CONFIGURED_DROP_REASONS_1_DROPPED_PKTS"},
@@ -212,7 +220,7 @@ TEST(FlexCounter, addRemoveCounter)
         false);
 
     testAddRemoveCounter(
-        sai_object_id_t(109),
+        {sai_object_id_t(109)},
         SAI_OBJECT_TYPE_TUNNEL, 
         TUNNEL_COUNTER_ID_LIST,
         {"SAI_TUNNEL_STAT_IN_OCTETS", "SAI_TUNNEL_STAT_IN_PACKETS"},
@@ -222,7 +230,7 @@ TEST(FlexCounter, addRemoveCounter)
 
     clearCalled = false;
     testAddRemoveCounter(
-        sai_object_id_t(109),
+        {sai_object_id_t(109)},
         SAI_OBJECT_TYPE_BUFFER_POOL, 
         BUFFER_POOL_COUNTER_ID_LIST,
         {"SAI_BUFFER_POOL_STAT_CURR_OCCUPANCY_BYTES", "SAI_BUFFER_POOL_STAT_WATERMARK_BYTES"},
@@ -243,7 +251,7 @@ TEST(FlexCounter, addRemoveCounter)
     };
 
     testAddRemoveCounter(
-        sai_object_id_t(110),
+        {sai_object_id_t(110)},
         SAI_OBJECT_TYPE_QUEUE, 
         QUEUE_ATTR_ID_LIST,
         {"SAI_QUEUE_ATTR_PAUSE_STATUS"},
@@ -263,7 +271,7 @@ TEST(FlexCounter, addRemoveCounter)
     };
 
     testAddRemoveCounter(
-        sai_object_id_t(111),
+        {sai_object_id_t(111)},
         SAI_OBJECT_TYPE_INGRESS_PRIORITY_GROUP, 
         PG_ATTR_ID_LIST,
         {"SAI_INGRESS_PRIORITY_GROUP_ATTR_PORT"},
@@ -287,7 +295,7 @@ TEST(FlexCounter, addRemoveCounter)
     };
 
     testAddRemoveCounter(
-        sai_object_id_t(112),
+        {sai_object_id_t(112)},
         SAI_OBJECT_TYPE_MACSEC_SA, 
         MACSEC_SA_ATTR_ID_LIST,
         {"SAI_MACSEC_SA_ATTR_CONFIGURED_EGRESS_XPN", "SAI_MACSEC_SA_ATTR_AN"},
@@ -307,7 +315,7 @@ TEST(FlexCounter, addRemoveCounter)
     };
 
     testAddRemoveCounter(
-        sai_object_id_t(113),
+        {sai_object_id_t(113)},
         SAI_OBJECT_TYPE_ACL_COUNTER, 
         ACL_COUNTER_ATTR_ID_LIST,
         {"SAI_ACL_COUNTER_ATTR_PACKETS"},
@@ -340,6 +348,15 @@ TEST(FlexCounter, queryCounterCapability)
         return SAI_STATUS_SUCCESS;
     };
 
+    sai->mock_clearStats = [&] (sai_object_type_t object_type, sai_object_id_t object_id, uint32_t number_of_counters, const sai_stat_id_t *counter_ids) {
+        return SAI_STATUS_SUCCESS;
+    };
+
+    sai->mock_bulkGetStats = [](sai_object_id_t, sai_object_type_t, uint32_t, const sai_object_key_t *, uint32_t, const sai_stat_id_t *, sai_stats_mode_t, sai_status_t *, uint64_t *)
+    {
+        return SAI_STATUS_FAILURE;
+    };
+
     auto counterVerifyFunc = [] (swss::Table &countersTable, const std::string& key, const std::vector<std::string>& counterIdNames, const std::vector<std::string>& expectedValues)
     {
         std::string value;
@@ -351,7 +368,7 @@ TEST(FlexCounter, queryCounterCapability)
     };
 
     testAddRemoveCounter(
-        sai_object_id_t(114),
+        {sai_object_id_t(114)},
         SAI_OBJECT_TYPE_PORT, 
         PORT_COUNTER_ID_LIST,
         {"SAI_PORT_STAT_IF_IN_OCTETS", "SAI_PORT_STAT_IF_IN_UCAST_PKTS"},
@@ -411,7 +428,6 @@ TEST(FlexCounter, addRemoveCounterPlugin)
 
 TEST(FlexCounter, addRemoveCounterForPort)
 {
-    std::shared_ptr<MockableSaiInterface> sai(new MockableSaiInterface());
     FlexCounter fc("test", sai, "COUNTERS_DB");
 
     sai_object_id_t counterVid{100};
@@ -445,6 +461,7 @@ TEST(FlexCounter, addRemoveCounterForPort)
     values.clear();
     values.emplace_back(POLL_INTERVAL_FIELD, "1000");
     values.emplace_back(FLEX_COUNTER_STATUS_FIELD, "enable");
+    values.emplace_back(STATS_MODE_FIELD, STATS_MODE_READ);
     fc.addCounterPlugin(values);
 
     usleep(1000*1000);
@@ -478,7 +495,9 @@ TEST(FlexCounter, addRemoveCounterForPort)
         }
 
         capability->list[0].stat_enum = SAI_PORT_STAT_IF_IN_OCTETS;
+        capability->list[0].stat_modes = SAI_STATS_MODE_READ | SAI_STATS_MODE_READ_AND_CLEAR;
         capability->list[1].stat_enum = SAI_PORT_STAT_IF_IN_ERRORS;
+        capability->list[1].stat_modes = SAI_STATS_MODE_READ | SAI_STATS_MODE_READ_AND_CLEAR;
         return SAI_STATUS_SUCCESS;
     };
 
@@ -498,4 +517,314 @@ TEST(FlexCounter, addRemoveCounterForPort)
     countersTable.del("oid:0x64");
     countersTable.getKeys(keys);
     ASSERT_TRUE(keys.empty());
+}
+
+TEST(FlexCounter, bulkCounter)
+{
+    sai->mock_getStatsExt = [&](sai_object_type_t, sai_object_id_t, uint32_t number_of_counters, const sai_stat_id_t *, sai_stats_mode_t, uint64_t *counters) {
+        for (uint32_t i = 0; i < number_of_counters; i++)
+        {
+            counters[i] = (i + 1) * 10;
+        }
+        return SAI_STATUS_SUCCESS;
+    };
+    sai->mock_getStats = [&](sai_object_type_t, sai_object_id_t, uint32_t number_of_counters, const sai_stat_id_t *, uint64_t *counters) {
+        for (uint32_t i = 0; i < number_of_counters; i++)
+        {
+            counters[i] = (i + 1) * 10;
+        }
+        return SAI_STATUS_SUCCESS;
+    };
+    sai->mock_queryStatsCapability = [&](sai_object_id_t switch_id, sai_object_type_t object_type, sai_stat_capability_list_t *stats_capability) {
+        // For now, just return failure to make test simple, will write a singe test to cover querySupportedCounters
+        return SAI_STATUS_FAILURE;
+    };
+
+    bool clearCalled = false;
+    sai->mock_bulkGetStats = [&](sai_object_id_t,
+                                sai_object_type_t,
+                                uint32_t object_count,
+                                const sai_object_key_t *object_keys,
+                                uint32_t number_of_counters,
+                                const sai_stat_id_t *counter_ids,
+                                sai_stats_mode_t mode,
+                                sai_status_t *object_status,
+                                uint64_t *counters)
+    {
+        EXPECT_TRUE(mode == SAI_STATS_MODE_BULK_READ_AND_CLEAR || mode == SAI_STATS_MODE_BULK_READ);
+        if (mode == SAI_STATS_MODE_BULK_READ_AND_CLEAR)
+        {
+            clearCalled = true;
+        }
+        for (uint32_t i = 0; i < object_count; i++)
+        {
+            object_status[i] = SAI_STATUS_SUCCESS;
+            for (uint32_t j = 0; j < number_of_counters; j++)
+            {
+                counters[i * number_of_counters + j] = (j + 1) * 100;
+            }
+        }
+        return SAI_STATUS_SUCCESS;
+    };
+
+    auto counterVerifyFunc = [] (swss::Table &countersTable, const std::string& key, const std::vector<std::string>& counterIdNames, const std::vector<std::string>& expectedValues)
+    {
+        std::string value;
+        for (size_t i = 0; i < counterIdNames.size(); i++)
+        {
+            countersTable.hget(key, counterIdNames[i], value);
+            ASSERT_EQ(value, expectedValues[i]);
+        }
+    };
+
+    testAddRemoveCounter(
+        {sai_object_id_t(100), sai_object_id_t(101)},
+        SAI_OBJECT_TYPE_COUNTER, 
+        FLOW_COUNTER_ID_LIST,
+        {"SAI_COUNTER_STAT_PACKETS", "SAI_COUNTER_STAT_BYTES"},
+        {"100", "200"},
+        counterVerifyFunc,
+        true);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(101), sai_object_id_t(102)},
+        SAI_OBJECT_TYPE_MACSEC_FLOW, 
+        MACSEC_FLOW_COUNTER_ID_LIST,
+        {"SAI_MACSEC_FLOW_STAT_CONTROL_PKTS", "SAI_MACSEC_FLOW_STAT_PKTS_UNTAGGED"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(102), sai_object_id_t(103)},
+        SAI_OBJECT_TYPE_MACSEC_SA, 
+        MACSEC_SA_COUNTER_ID_LIST,
+        {"SAI_MACSEC_SA_STAT_OCTETS_ENCRYPTED", "SAI_MACSEC_SA_STAT_OCTETS_PROTECTED"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(103), sai_object_id_t(104)},
+        SAI_OBJECT_TYPE_PORT, 
+        PORT_COUNTER_ID_LIST,
+        {"SAI_PORT_STAT_IF_IN_OCTETS", "SAI_PORT_STAT_IF_IN_UCAST_PKTS"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+ 
+    testAddRemoveCounter(
+        {sai_object_id_t(104), sai_object_id_t(105)},
+        SAI_OBJECT_TYPE_PORT, 
+        PORT_DEBUG_COUNTER_ID_LIST,
+        {"SAI_PORT_STAT_IN_CONFIGURED_DROP_REASONS_0_DROPPED_PKTS", "SAI_PORT_STAT_IN_CONFIGURED_DROP_REASONS_1_DROPPED_PKTS"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(105), sai_object_id_t(106)},
+        SAI_OBJECT_TYPE_QUEUE, 
+        QUEUE_COUNTER_ID_LIST,
+        {"SAI_QUEUE_STAT_PACKETS", "SAI_QUEUE_STAT_BYTES"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false,
+        STATS_MODE_READ_AND_CLEAR);
+    EXPECT_EQ(true, clearCalled);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(106), sai_object_id_t(107)},
+        SAI_OBJECT_TYPE_INGRESS_PRIORITY_GROUP, 
+        PG_COUNTER_ID_LIST,
+        {"SAI_INGRESS_PRIORITY_GROUP_STAT_PACKETS", "SAI_INGRESS_PRIORITY_GROUP_STAT_BYTES"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(107), sai_object_id_t(108)},
+        SAI_OBJECT_TYPE_ROUTER_INTERFACE, 
+        RIF_COUNTER_ID_LIST,
+        {"SAI_ROUTER_INTERFACE_STAT_IN_OCTETS", "SAI_ROUTER_INTERFACE_STAT_IN_PACKETS"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(108), sai_object_id_t(109)},
+        SAI_OBJECT_TYPE_SWITCH, 
+        SWITCH_DEBUG_COUNTER_ID_LIST,
+        {"SAI_SWITCH_STAT_IN_CONFIGURED_DROP_REASONS_0_DROPPED_PKTS", "SAI_SWITCH_STAT_IN_CONFIGURED_DROP_REASONS_1_DROPPED_PKTS"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+
+    testAddRemoveCounter(
+        {sai_object_id_t(109), sai_object_id_t(110)},
+        SAI_OBJECT_TYPE_TUNNEL, 
+        TUNNEL_COUNTER_ID_LIST,
+        {"SAI_TUNNEL_STAT_IN_OCTETS", "SAI_TUNNEL_STAT_IN_PACKETS"},
+        {"100", "200"},
+        counterVerifyFunc,
+        false);
+
+    clearCalled = false;
+    testAddRemoveCounter(
+        {sai_object_id_t(109), sai_object_id_t(110)},
+        SAI_OBJECT_TYPE_BUFFER_POOL, 
+        BUFFER_POOL_COUNTER_ID_LIST,
+        {"SAI_BUFFER_POOL_STAT_CURR_OCCUPANCY_BYTES", "SAI_BUFFER_POOL_STAT_WATERMARK_BYTES"},
+        {"10", "20"},
+        counterVerifyFunc,
+        false);
+    // buffer pool stats does not support bulk
+    EXPECT_EQ(false, clearCalled);
+}
+
+TEST(FlexCounter, counterIdChange)
+{
+    sai->mock_getStats = [&](sai_object_type_t, sai_object_id_t, uint32_t number_of_counters, const sai_stat_id_t *, uint64_t *counters) {
+        for (uint32_t i = 0; i < number_of_counters; i++)
+        {
+            counters[i] = (i + 1) * 10;
+        }
+        return SAI_STATUS_SUCCESS;
+    };
+    sai->mock_bulkGetStats = [&](sai_object_id_t,
+                                sai_object_type_t,
+                                uint32_t object_count,
+                                const sai_object_key_t *object_keys,
+                                uint32_t number_of_counters,
+                                const sai_stat_id_t *counter_ids,
+                                sai_stats_mode_t mode,
+                                sai_status_t *object_status,
+                                uint64_t *counters)
+    {
+        for (uint32_t i = 0; i < number_of_counters; i++)
+        {
+            switch(counter_ids[i])
+            {
+                case SAI_PORT_STAT_IF_IN_OCTETS:
+                case SAI_PORT_STAT_IF_IN_UCAST_PKTS:
+                    break;
+                default:
+                    return SAI_STATUS_NOT_SUPPORTED; 
+            }
+        }
+
+        for (uint32_t i = 0; i < object_count; i++)
+        {
+            object_status[i] = SAI_STATUS_SUCCESS;
+            for (uint32_t j = 0; j < number_of_counters; j++)
+            {
+                counters[i * number_of_counters + j] = (j + 1) * 100;
+            }
+        }
+        return SAI_STATUS_SUCCESS;
+    };
+    auto counterVerifyFunc = [] (swss::Table &countersTable, const std::string& key, const std::vector<std::string>& counterIdNames, const std::vector<std::string>& expectedValues)
+    {
+        std::string value;
+        for (size_t i = 0; i < counterIdNames.size(); i++)
+        {
+            countersTable.hget(key, counterIdNames[i], value);
+            ASSERT_EQ(value, expectedValues[i]);
+        }
+    };
+    
+    FlexCounter fc("test", sai, "COUNTERS_DB");
+
+    test_syncd::mockVidManagerObjectTypeQuery(SAI_OBJECT_TYPE_PORT);
+
+    std::vector<swss::FieldValueTuple> values;
+    values.emplace_back(POLL_INTERVAL_FIELD, "1000");
+    values.emplace_back(FLEX_COUNTER_STATUS_FIELD, "enable");
+    values.emplace_back(STATS_MODE_FIELD, STATS_MODE_READ);
+    fc.addCounterPlugin(values);
+    
+    values.clear();
+    values.emplace_back(PORT_COUNTER_ID_LIST, "SAI_PORT_STAT_IF_IN_NON_UCAST_PKTS,SAI_PORT_STAT_IF_IN_DISCARDS");
+    sai_object_id_t oid{100};
+    fc.addCounter(oid, oid, values);
+
+    usleep(1000*1050);
+    swss::DBConnector db("COUNTERS_DB", 0);
+    swss::RedisPipeline pipeline(&db);
+    swss::Table countersTable(&pipeline, COUNTERS_TABLE, false);
+
+    std::vector<std::string> keys;
+    countersTable.getKeys(keys);
+    EXPECT_EQ(keys.size(),1);
+    std::string expectedKey = toOid(oid);
+    counterVerifyFunc(countersTable,
+                      expectedKey,
+                      {"SAI_PORT_STAT_IF_IN_NON_UCAST_PKTS", "SAI_PORT_STAT_IF_IN_DISCARDS"},
+                      {"10", "20"});
+
+    // not support bulk to support bulk
+    values.clear();
+    values.emplace_back(PORT_COUNTER_ID_LIST, "SAI_PORT_STAT_IF_IN_OCTETS,SAI_PORT_STAT_IF_IN_UCAST_PKTS");
+    fc.addCounter(oid, oid, values);
+    
+    usleep(1000*1050);
+    counterVerifyFunc(countersTable,
+                      expectedKey,
+                      {"SAI_PORT_STAT_IF_IN_OCTETS", "SAI_PORT_STAT_IF_IN_UCAST_PKTS"},
+                      {"100", "200"});
+
+    // support bulk but counter id changes
+    values.clear();
+    values.emplace_back(PORT_COUNTER_ID_LIST, "SAI_PORT_STAT_IF_IN_OCTETS");
+    fc.addCounter(oid, oid, values);
+    
+    usleep(1000*1050);
+    counterVerifyFunc(countersTable,
+                      expectedKey,
+                      {"SAI_PORT_STAT_IF_IN_OCTETS"},
+                      {"100"});
+
+    // support bulk with different counter id
+    sai_object_id_t oid1{101};
+    values.clear();
+    values.emplace_back(PORT_COUNTER_ID_LIST, "SAI_PORT_STAT_IF_IN_OCTETS,SAI_PORT_STAT_IF_IN_UCAST_PKTS");
+    fc.addCounter(oid1, oid1, values);
+
+    usleep(1000*1050);
+    counterVerifyFunc(countersTable,
+                      toOid(oid1),
+                      {"SAI_PORT_STAT_IF_IN_OCTETS", "SAI_PORT_STAT_IF_IN_UCAST_PKTS"},
+                      {"100", "200"});
+
+    // support bulk to not support bulk
+    values.clear();
+    values.emplace_back(PORT_COUNTER_ID_LIST, "SAI_PORT_STAT_IF_IN_NON_UCAST_PKTS,SAI_PORT_STAT_IF_IN_UCAST_PKTS");
+    fc.addCounter(oid, oid, values);
+
+    usleep(1000*1050);
+    counterVerifyFunc(countersTable,
+                      expectedKey,
+                      {"SAI_PORT_STAT_IF_IN_NON_UCAST_PKTS", "SAI_PORT_STAT_IF_IN_UCAST_PKTS"},
+                      {"10", "20"});
+
+    // not support bulk but counter id changes
+    values.clear();
+    values.emplace_back(PORT_COUNTER_ID_LIST, "SAI_PORT_STAT_IF_IN_NON_UCAST_PKTS,SAI_PORT_STAT_IF_IN_DISCARDS");
+    fc.addCounter(oid, oid, values);
+    usleep(1000*1050);
+    counterVerifyFunc(countersTable,
+                      expectedKey,
+                      {"SAI_PORT_STAT_IF_IN_NON_UCAST_PKTS", "SAI_PORT_STAT_IF_IN_DISCARDS"},
+                      {"10", "20"});
+
+    // verify oid1 is still using bulk
+    counterVerifyFunc(countersTable,
+                      toOid(oid1),
+                      {"SAI_PORT_STAT_IF_IN_OCTETS", "SAI_PORT_STAT_IF_IN_UCAST_PKTS"},
+                      {"100", "200"});
+
+    fc.removeCounter(oid);
+    countersTable.del(expectedKey);
+    fc.removeCounter(oid1);
+    countersTable.del(toOid(oid1));
 }
