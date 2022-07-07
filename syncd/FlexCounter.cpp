@@ -518,9 +518,16 @@ public:
         std::vector<std::string> idStrings;
         idStrings.reserve(m_objectIdsMap.size());
         std::transform(m_objectIdsMap.begin(),
-                        m_objectIdsMap.end(),
-                        std::back_inserter(idStrings),
-                        [] (auto &kv) { return sai_serialize_object_id(kv.first); });
+                       m_objectIdsMap.end(),
+                       std::back_inserter(idStrings),
+                       [] (auto &kv) { return sai_serialize_object_id(kv.first); });
+        for (auto &kv : m_bulkContexts)
+        {
+            std::transform(kv.second->object_vids.begin(),
+                           kv.second->object_vids.end(),
+                           std::back_inserter(idStrings),
+                           [] (auto &vid) { return sai_serialize_object_id(vid); });
+        }
         std::for_each(m_plugins.begin(),
                       m_plugins.end(),
                       [&] (auto &sha) { runRedisScript(counters_db, sha, idStrings, argv); });
