@@ -97,6 +97,25 @@ void FlexCounterManager::addCounter(
     }
 }
 
+void bulkAddCounter(
+        _In_ sai_object_type_t objectType,
+        _In_ const std::vector<sai_object_id_t>& vids,
+        _In_ const std::vector<sai_object_id_t>& rids,
+        _In_ const std::string& instanceId,
+        _In_ const std::vector<swss::FieldValueTuple>& values)
+{
+    SWSS_LOG_ENTER();
+
+    auto fc = getInstance(instanceId);
+
+    fc->addCounter(objectType, vids, rids, values);
+
+    if (fc->isDiscarded())
+    {
+        removeInstance(instanceId);
+    }
+}
+
 void FlexCounterManager::removeCounter(
         _In_ sai_object_id_t vid,
         _In_ const std::string& instanceId)

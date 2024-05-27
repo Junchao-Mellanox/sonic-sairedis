@@ -2517,6 +2517,13 @@ void Syncd::processFlexCounterEvent( // TODO must be moved to go via ASIC channe
     processFlexCounterEvent(key, op, values, false);
 }
 
+typedef struct AddCounterContext
+{
+    std::vector<sai_object_id_t> vids;
+    std::vector<sai_object_id_t> rids;
+    std::vector<std::string> keys;
+} AddCounterContext;
+
 sai_status_t Syncd::processFlexCounterEvent(
         _In_ const std::string &key,
         _In_ const std::string &op,
@@ -2543,6 +2550,8 @@ sai_status_t Syncd::processFlexCounterEvent(
     auto strVids = key.substr(delimiter + 1);
     auto vidStringVector = swss::tokenize(strVids, ',');
 
+    std::unordered_map<sai_object_type_t, AddCounterContext> ctxMap;
+
     for(auto &strVid : vidStringVector)
     {
         auto effective_op = op;
@@ -2550,6 +2559,8 @@ sai_status_t Syncd::processFlexCounterEvent(
 
         sai_object_id_t vid;
         sai_deserialize_object_id(strVid, vid);
+
+        auto objectType = VidManager::objectTypeQuery(vid);
 
         sai_object_id_t rid;
 
@@ -2570,11 +2581,16 @@ sai_status_t Syncd::processFlexCounterEvent(
 
         if (effective_op == SET_COMMAND)
         {
-            m_manager->addCounter(vid, rid, groupName, values);
-            if (fromAsicChannel)
+            auto iter = ctxMap.find(objectType);
+            if (iter == ctxMap.end())
             {
-                m_flexCounterTable->set(singleKey, values);
+                auto ret = ctxMap.emplace(objectType, AddCounterContext());
+                iter = ret.first;
             }
+
+            iter->second.vids.push_back(vid);
+            iter->second.rids.push_back(rid);
+            iter->second.keys.push_back(singleKey);
         }
         else if (effective_op == DEL_COMMAND)
         {
@@ -2587,6 +2603,18 @@ sai_status_t Syncd::processFlexCounterEvent(
         else
         {
             SWSS_LOG_ERROR("unknown command: %s", op.c_str());
+        }
+    }
+
+    for (auto &entry : ctxMap)
+    {
+        m_manager->bulkAddCounter(entry.first, entry.second.vids, entry.second.rids, groupName, values);
+        if (fromAsicChannel)
+        {
+            for (auto &singleKey : entry.second.keys)
+            {
+                m_flexCounterTable->set(singleKey, values);
+            }
         }
     }
 
