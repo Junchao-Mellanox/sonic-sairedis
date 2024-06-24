@@ -3756,11 +3756,22 @@ sai_status_t Syncd::processNotifySyncd(
 
     if (!m_commandLineOptions->m_enableTempView)
     {
-        SWSS_LOG_NOTICE("received %s, ignored since TEMP VIEW is not used, returning success", key.c_str());
+        if (m_commandLineOptions->m_startType == SAI_START_TYPE_FAST_BOOT && redisNotifySyncd == SAI_REDIS_NOTIFY_SYNCD_APPLY_VIEW)
+        {
+            status = onApplyViewInFastFastBoot();
 
-        sendNotifyResponse(SAI_STATUS_SUCCESS);
+            sendNotifyResponse(status);
 
-        return SAI_STATUS_SUCCESS;
+            return status;
+        }
+        else
+        {
+            SWSS_LOG_NOTICE("received %s, ignored since TEMP VIEW is not used, returning success", key.c_str());
+        
+            sendNotifyResponse(SAI_STATUS_SUCCESS);
+
+            return SAI_STATUS_SUCCESS;
+        }
     }
 
     auto redisNotifySyncd = sai_deserialize_redis_notify_syncd(key);
@@ -3822,8 +3833,7 @@ sai_status_t Syncd::processNotifySyncd(
             m_asicInitViewMode = false;
 
             if (m_commandLineOptions->m_startType == SAI_START_TYPE_FASTFAST_BOOT ||
-                m_commandLineOptions->m_startType == SAI_START_TYPE_EXPRESS_BOOT ||
-                m_commandLineOptions->m_startType == SAI_START_TYPE_FAST_BOOT)
+                m_commandLineOptions->m_startType == SAI_START_TYPE_EXPRESS_BOOT)
             {
                 // express/fastfast boot configuration end
 
