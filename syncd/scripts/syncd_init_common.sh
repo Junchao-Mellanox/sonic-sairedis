@@ -26,10 +26,7 @@ else
     CMD_ARGS=
 fi
 
-# Use temporary view between init and apply except when in fast-reboot
-if [[ "$(cat /proc/cmdline)" != *"SONIC_BOOT_TYPE=fast-reboot"* ]]; then
-    CMD_ARGS+=" -u"
-fi
+CMD_ARGS+=" -u"
 
 # Create a folder for SAI failure dump files
 mkdir -p /var/log/sai_failure_dump/
