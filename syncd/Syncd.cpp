@@ -35,6 +35,9 @@
 
 #include <iterator>
 #include <algorithm>
+#include <cstdlib>
+#include <string>
+#include <arpa/inet.h>
 
 #define DEF_SAI_WARM_BOOT_DATA_FILE "/var/warmboot/sai-warmboot.bin"
 #define SAI_FAILURE_DUMP_SCRIPT "/usr/bin/sai_failure_dump.sh"
@@ -971,30 +974,111 @@ sai_status_t Syncd::processBulkCreateEntry(
     {
         case SAI_OBJECT_TYPE_ROUTE_ENTRY:
         {
-            std::vector<sai_route_entry_t> entries(object_count);
-            for (uint32_t it = 0; it < object_count; it++)
+            const char* env_value = std::getenv("GENERATE_ROUTE");
+
+            if (env_value == nullptr)
             {
-                sai_deserialize_route_entry(objectIds[it], entries[it]);
+                std::vector<sai_route_entry_t> entries(object_count);
+                for (uint32_t it = 0; it < object_count; it++)
+                {
+                    sai_deserialize_route_entry(objectIds[it], entries[it]);
 
-                entries[it].switch_id = m_translator->translateVidToRid(entries[it].switch_id);
-                entries[it].vr_id = m_translator->translateVidToRid(entries[it].vr_id);
+                    entries[it].switch_id = m_translator->translateVidToRid(entries[it].switch_id);
+                    entries[it].vr_id = m_translator->translateVidToRid(entries[it].vr_id);
+                }
+
+                static PerformanceIntervalTimer timer("Syncd::processBulkCreateEntry(route_entry) CREATE", 0);
+
+                timer.start();
+
+                status = m_vendorSai->bulkCreate(
+                        object_count,
+                        entries.data(),
+                        attr_counts.data(),
+                        attr_lists.data(),
+                        mode,
+                        statuses.data());
+
+                timer.stop();
+
+                timer.inc(object_count);
             }
+            else
+            {
+                sai_route_entry_t *route_entries;
+                sai_attribute_t   *attrs;
+                sai_attribute_t  **attr_ptrs;
+                uint32_t          *attr_count;
+                sai_status_t      *statuses_ptr;
+                object_count = static_cast<uint32_t>(std::stoul(env_value, nullptr, 10));
+                route_entries = (sai_route_entry_t *)calloc(object_count, sizeof(sai_route_entry_t));
+                attrs = (sai_attribute_t *)calloc(object_count, sizeof(sai_attribute_t));
+                attr_ptrs = (sai_attribute_t **)calloc(object_count, sizeof(sai_attribute_t *));
+                attr_count = (uint32_t *)calloc(object_count, sizeof(uint32_t));
+                statuses_ptr = (sai_status_t *)calloc(object_count, sizeof(sai_status_t));
 
-            static PerformanceIntervalTimer timer("Syncd::processBulkCreateEntry(route_entry) CREATE");
+                std::vector<sai_route_entry_t> entries(1);
+                sai_deserialize_route_entry(objectIds[0], entries[0]);
+                auto switch_id = m_translator->translateVidToRid(entries[0].switch_id);
+                auto vr_id = m_translator->translateVidToRid(entries[0].vr_id);
+                uint32_t config_attrs_count = attr_counts[0];
+                auto config_attrs = attr_lists[0];
+                sai_object_id_t rif = SAI_NULL_OBJECT_ID;
+                for (uint32_t j = 0; j < config_attrs_count; j++)
+                {
+                    auto config_attr = config_attrs[j];
+                    if (config_attr.id == SAI_ROUTE_ENTRY_ATTR_NEXT_HOP_ID)
+                    {
+                        rif = config_attr.value.oid;
+                        break;
+                    }
+                }
 
-            timer.start();
+                if (rif == SAI_NULL_OBJECT_ID) 
+                {
+                    SWSS_LOG_ERROR("RIF is NULL in processBulkCreateEntry");
+                }
 
-            status = m_vendorSai->bulkCreate(
-                    object_count,
-                    entries.data(),
-                    attr_counts.data(),
-                    attr_lists.data(),
-                    mode,
-                    statuses.data());
+                for (uint32_t i = 0; i < object_count; i++)
+                {
+                    sai_ip_prefix_t ip_prefix;
+                    ip_prefix.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
+                    ip_prefix.addr.ip4 = htonl(0x01010101 + i);
+                    ip_prefix.mask.ip4 = htonl(0xffffffff);
+                    attrs[i].id = SAI_ROUTE_ENTRY_ATTR_NEXT_HOP_ID;
+                    attrs[i].value.oid = rif;
+                    attr_ptrs[i] = &attrs[i];
+                    attr_count[i] = 1;
 
-            timer.stop();
+                    memset(&route_entries[i], 0, sizeof(sai_route_entry_t));
 
-            timer.inc(object_count);
+                    route_entries[i].switch_id = switch_id;
+                    route_entries[i].vr_id = vr_id;
+                    memcpy(&route_entries[i].destination, &ip_prefix, sizeof(sai_ip_prefix_t));
+                }
+
+                static PerformanceIntervalTimer timer("Syncd::processBulkCreateEntry(route_entry from syncd) CREATE", 0);
+
+                timer.start();
+
+                status = m_vendorSai->bulkCreate(
+                        object_count,
+                        route_entries,
+                        attr_count,
+                        const_cast<const sai_attribute_t**>(attr_ptrs),
+                        mode,
+                        statuses_ptr);
+                
+                timer.stop();
+
+                timer.inc(object_count);
+                
+                free(route_entries);
+                free(attrs);
+                free(attr_ptrs);
+                free(attr_count);
+                free(statuses_ptr);
+            }
         }
         break;
 
