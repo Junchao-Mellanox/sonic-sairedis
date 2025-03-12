@@ -212,6 +212,13 @@ namespace sairedis
                     _In_ sai_object_type_t object_type,
                     _Inout_ sai_stat_capability_list_t *stats_capability) = 0;
 
+            sai_status_t queryStatsStCapability(
+	            _In_ sai_object_id_t switch_id,
+	            _In_ sai_object_type_t object_type,
+		    _Inout_ sai_stat_st_capability_list_t *stats_capability) {
+	         return SAI_STATUS_NOT_IMPLEMENTED; 
+	    }
+
             virtual sai_status_t getStatsExt(
                     _In_ sai_object_type_t object_type,
                     _In_ sai_object_id_t object_id,
