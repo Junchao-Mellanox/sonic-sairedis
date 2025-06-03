@@ -3147,6 +3147,48 @@ std::string sai_serialize_poe_port_power_consumption(
     return j.dump();
 }
 
+std::string sai_serialize_eni_trusted_vni_entry(
+        _In_ const sai_eni_trusted_vni_entry_t &eni_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(eni_trusted_vni_entry.switch_id);
+    j["eni_id"] = sai_serialize_object_id(eni_trusted_vni_entry.eni_id);
+    j["vni_range"] = sai_serialize_range(eni_trusted_vni_entry.vni_range);
+
+    return j.dump();
+}
+
+std::string sai_serialize_global_trusted_vni_entry(
+        _In_ const sai_global_trusted_vni_entry_t &global_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(global_trusted_vni_entry.switch_id);
+    j["vni_range"] = sai_serialize_range(global_trusted_vni_entry.vni_range);
+
+    return j.dump();
+}
+
+std::string sai_serialize_outbound_port_map_port_range_entry(
+        _In_ const sai_outbound_port_map_port_range_entry_t &outbound_port_map_port_range_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j;
+
+    j["switch_id"] = sai_serialize_object_id(outbound_port_map_port_range_entry.switch_id);
+    j["outbound_port_map_id"] = sai_serialize_object_id(outbound_port_map_port_range_entry.outbound_port_map_id);
+    j["port_range"] = sai_serialize_range(outbound_port_map_port_range_entry.dst_port_range);
+
+    return j.dump();
+}
+
+
 // deserialize
 
 void sai_deserialize_bool(
@@ -4765,6 +4807,44 @@ void sai_deserialize_prefix_compression_entry(
     sai_deserialize_object_id(j["switch_id"], prefix_compression_entry.switch_id);
     sai_deserialize_object_id(j["prefix_table_id"], prefix_compression_entry.prefix_table_id);
     sai_deserialize_ip_prefix(j["prefix"], prefix_compression_entry.prefix);
+}
+
+void sai_deserialize_eni_trusted_vni_entry(
+        _In_ const std::string& s,
+        _Out_ sai_eni_trusted_vni_entry_t& eni_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+    
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], eni_trusted_vni_entry.switch_id);
+    sai_deserialize_object_id(j["eni_id"], eni_trusted_vni_entry.eni_id);
+    sai_deserialize_range(j["vni_range"], eni_trusted_vni_entry.vni_range);
+}
+
+void sai_deserialize_global_trusted_vni_entry(
+        _In_ const std::string& s,
+        _Out_ sai_global_trusted_vni_entry_t& global_trusted_vni_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], global_trusted_vni_entry.switch_id);
+    sai_deserialize_range(j["vni_range"], global_trusted_vni_entry.vni_range);
+}
+
+void sai_deserialize_outbound_port_map_port_range_entry(
+        _In_ const std::string& s,
+        _Out_ sai_outbound_port_map_port_range_entry_t& outbound_port_map_port_range_entry)
+{
+    SWSS_LOG_ENTER();
+
+    json j = json::parse(s);
+
+    sai_deserialize_object_id(j["switch_id"], outbound_port_map_port_range_entry.switch_id);
+    sai_deserialize_object_id(j["outbound_port_map_id"], outbound_port_map_port_range_entry.outbound_port_map_id);
+    sai_deserialize_range(j["port_range"], outbound_port_map_port_range_entry.dst_port_range);
 }
 
 void sai_deserialize_flow_entry(
