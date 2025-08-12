@@ -16,6 +16,8 @@ int main(int argc, char **argv)
 
     swss::Logger::getInstance().setMinPrio(swss::Logger::SWSS_NOTICE);
 
+    swss::Logger::linkToDbNative("saiplayer");
+
     syncd::MetadataLogger::initialize();
 
     auto commandLineOptions = CommandLineOptionsParser::parseCommandLine(argc, argv);
