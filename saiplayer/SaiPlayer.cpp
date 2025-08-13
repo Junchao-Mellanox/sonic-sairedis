@@ -3256,7 +3256,7 @@ int SaiPlayer::run()
 
     if (m_commandLineOptions->m_enableDebug)
     {
-        swss::Logger::getInstance().setMinPrio(swss::Logger::SWSS_LOG_INFO);
+        swss::Logger::getInstance().setMinPrio(swss::Logger::SWSS_INFO);
     }
 
     m_test_services = m_smt.getServiceMethodTable();
