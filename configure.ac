@@ -227,7 +227,7 @@ AC_ARG_WITH(extra-libsai-ldflags,
                           extra libsai.so flags for vendor library],
 [AC_SUBST(EXTRA_LIBSAI_LDFLAGS, "${withval}")])
 
-AC_SUBST(SAIINC, "-I\$(top_srcdir)/SAI/inc -I\$(top_srcdir)/SAI/experimental -I\$(top_srcdir)/SAI/meta")
+AC_SUBST(SAIINC, "-I\$(top_srcdir)/SAI/inc -I\$(top_srcdir)/SAI/experimental -I\$(top_srcdir)/SAI/meta -I\$(top_srcdir)/SAI/custom")
 
 AM_COND_IF([SYNCD], [
 AM_COND_IF([SAIVS], [], [
