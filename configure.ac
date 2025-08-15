@@ -232,7 +232,7 @@ AC_SUBST(SAIINC, "-I\$(top_srcdir)/SAI/inc -I\$(top_srcdir)/SAI/experimental -I\
 AM_COND_IF([SYNCD], [
 AM_COND_IF([SAIVS], [], [
 SAVED_FLAGS="$CXXFLAGS"
-CXXFLAGS="-Xlinker --no-as-needed -lsai -I$srcdir/SAI/inc -I$srcdir/SAI/experimental -I$srcdir/SAI/meta $EXTRA_LIBSAI_LDFLAGS"
+CXXFLAGS="-Xlinker --no-as-needed -lsai -I$srcdir/SAI/inc -I$srcdir/SAI/experimental -I$srcdir/SAI/meta -I$srcdir/SAI/custom $EXTRA_LIBSAI_LDFLAGS"
 AC_CHECK_FUNCS(sai_query_api_version, [
 AC_MSG_CHECKING([SAI headers API version and library version check])
 AC_TRY_RUN([
@@ -282,7 +282,7 @@ AM_COND_IF([SAIVS],
 [
     AM_COND_IF([SYNCD], [
     SAVED_FLAGS="$CXXFLAGS"
-    CXXFLAGS="-Xlinker --no-as-needed -lsai -I$srcdir/SAI/inc -I$srcdir/SAI/experimental -I$srcdir/SAI/meta"
+    CXXFLAGS="-Xlinker --no-as-needed -lsai -I$srcdir/SAI/inc -I$srcdir/SAI/experimental -I$srcdir/SAI/meta  -I$srcdir/SAI/custom"
     AC_CHECK_FUNCS(sai_bulk_object_clear_stats sai_bulk_object_get_stats sai_query_stats_st_capability sai_tam_telemetry_get_data)
     CXXFLAGS="$SAVED_FLAGS"
     ])
