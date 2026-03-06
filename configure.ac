@@ -181,7 +181,7 @@ CXXFLAGS="$SAVED_FLAGS"
 
 AC_SUBST(CXXFLAGS_COMMON)
 
-AC_SUBST(SAIINC, "-I\$(top_srcdir)/SAI/inc -I\$(top_srcdir)/SAI/experimental -I\$(top_srcdir)/SAI/meta")
+AC_SUBST(SAIINC, "-I\$(top_srcdir)/SAI/inc -I\$(top_srcdir)/SAI/experimental -I\$(top_srcdir)/SAI/meta -I\$(top_srcdir)/SAI/custom")
 
 AC_OUTPUT(Makefile
           meta/Makefile

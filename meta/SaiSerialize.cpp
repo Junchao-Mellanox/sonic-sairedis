@@ -217,10 +217,10 @@ sai_status_t transfer_attribute(
             RETURN_ON_ERROR(transfer_list(src_attr.value.s8list, dst_attr.value.s8list, countOnly));
             break;
 
-//        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
-//            RETURN_ON_ERROR(transfer_list(src_attr.value.u16list, dst_attr.value.u16list, countOnly));
-//            break;
-//
+        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
+            RETURN_ON_ERROR(transfer_list(src_attr.value.u16list, dst_attr.value.u16list, countOnly));
+            break;
+
 //        case SAI_ATTR_VALUE_TYPE_INT16_LIST:
 //            RETURN_ON_ERROR(transfer_list(src_attr.value.s16list, dst_attr.value.s16list, countOnly));
 //            break;
@@ -1756,9 +1756,9 @@ std::string sai_serialize_attr_value(
         case SAI_ATTR_VALUE_TYPE_INT8_LIST:
             return sai_serialize_number_list(attr.value.s8list, countOnly);
 
-//        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
-//            return sai_serialize_number_list(attr.value.u16list, countOnly);
-//
+        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
+            return sai_serialize_number_list(attr.value.u16list, countOnly);
+
 //        case SAI_ATTR_VALUE_TYPE_INT16_LIST:
 //            return sai_serialize_number_list(attr.value.s16list, countOnly);
 
@@ -3293,9 +3293,9 @@ void sai_deserialize_attr_value(
         case SAI_ATTR_VALUE_TYPE_INT8_LIST:
             return sai_deserialize_number_list(s, attr.value.s8list, countOnly);
 
-//        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
-//            return sai_deserialize_number_list(s, attr.value.u16list, countOnly);
-//
+        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
+            return sai_deserialize_number_list(s, attr.value.u16list, countOnly);
+
 //        case SAI_ATTR_VALUE_TYPE_INT16_LIST:
 //            return sai_deserialize_number_list(s, attr.value.s16list, countOnly);
 
@@ -4018,9 +4018,9 @@ void sai_deserialize_free_attribute_value(
             sai_free_list(attr.value.s8list);
             break;
 
-//        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
-//            sai_free_list(attr.value.u16list);
-//            break;
+        case SAI_ATTR_VALUE_TYPE_UINT16_LIST:
+            sai_free_list(attr.value.u16list);
+            break;
 //
 //        case SAI_ATTR_VALUE_TYPE_INT16_LIST:
 //            sai_free_list(attr.value.s16list);
