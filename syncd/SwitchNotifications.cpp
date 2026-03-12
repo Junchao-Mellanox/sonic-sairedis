@@ -1,6 +1,7 @@
 #include "SwitchNotifications.h"
 
 #include "swss/logger.h"
+#include <array>
 
 using namespace syncd;
 
@@ -47,6 +48,16 @@ void SwitchNotifications::SlotBase::onFdbEvent(
     return m_slots.at(context)->m_handler->onFdbEvent(count,data);
 }
 
+void SwitchNotifications::SlotBase::onNatEvent(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_nat_event_notification_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onNatEvent(count,data);
+}
+
 void SwitchNotifications::SlotBase::onPortStateChange(
         _In_ int context,
         _In_ uint32_t count,
@@ -55,6 +66,17 @@ void SwitchNotifications::SlotBase::onPortStateChange(
     SWSS_LOG_ENTER();
 
     return m_slots.at(context)->m_handler->onPortStateChange(count, data);
+}
+
+void SwitchNotifications::SlotBase::onPortHostTxReady(
+        _In_ int context,
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_object_id_t port_id,
+        _In_ sai_port_host_tx_ready_status_t host_tx_ready_status)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onPortHostTxReady(switch_id, port_id, host_tx_ready_status);
 }
 
 void SwitchNotifications::SlotBase::onBfdSessionStateChange(
@@ -67,6 +89,36 @@ void SwitchNotifications::SlotBase::onBfdSessionStateChange(
     return m_slots.at(context)->m_handler->onBfdSessionStateChange(count, data);
 }
 
+void SwitchNotifications::SlotBase::onIcmpEchoSessionStateChange(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_icmp_echo_session_state_notification_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onIcmpEchoSessionStateChange(count, data);
+}
+
+void SwitchNotifications::SlotBase::onHaSetEvent(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_ha_set_event_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onHaSetEvent(count, data);
+}
+
+void SwitchNotifications::SlotBase::onHaScopeEvent(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_ha_scope_event_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onHaScopeEvent(count, data);
+}
+
 void SwitchNotifications::SlotBase::onQueuePfcDeadlock(
         _In_ int context,
         _In_ uint32_t count,
@@ -75,6 +127,19 @@ void SwitchNotifications::SlotBase::onQueuePfcDeadlock(
     SWSS_LOG_ENTER();
 
     return m_slots[context]->m_handler->onQueuePfcDeadlock(count, data);
+}
+void SwitchNotifications::SlotBase::onSwitchAsicSdkHealthEvent(
+        _In_ int context,
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_switch_asic_sdk_health_severity_t severity,
+        _In_ sai_timespec_t timestamp,
+        _In_ sai_switch_asic_sdk_health_category_t category,
+        _In_ sai_switch_health_data_t data,
+        _In_ const sai_u8_list_t description)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onSwitchAsicSdkHealthEvent(switch_id, severity, timestamp, category, data, description);
 }
 
 void SwitchNotifications::SlotBase::onSwitchShutdownRequest(
@@ -94,6 +159,25 @@ void SwitchNotifications::SlotBase::onSwitchStateChange(
     SWSS_LOG_ENTER();
 
     return m_slots.at(context)->m_handler->onSwitchStateChange(switch_id, switch_oper_status);
+}
+
+void SwitchNotifications::SlotBase::onTwampSessionEvent(
+        _In_ int context,
+        _In_ uint32_t count,
+        _In_ const sai_twamp_session_event_notification_data_t *data)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onTwampSessionEvent(count, data);
+}
+
+void SwitchNotifications::SlotBase::onTamTelTypeConfigChange(
+        _In_ int context,
+        _In_ sai_object_id_t tam_tel_id)
+{
+    SWSS_LOG_ENTER();
+
+    return m_slots.at(context)->m_handler->onTamTelTypeConfigChange(tam_tel_id);
 }
 
 const sai_switch_notifications_t& SwitchNotifications::SlotBase::getSwitchNotifications() const

@@ -7,6 +7,7 @@
 *.so
 *.pyc
 *_wrap.cpp
+*.bak
 
 # Packaging Files #
 ###################
@@ -58,6 +59,10 @@ stamp-h1
 python/build/
 python/setup.py
 
+lib/sai_redis.cpp
+vslib/sai_vs.cpp
+proxylib/sai_proxy.cpp
+
 # Test Files #
 ##############
 meta/test-suite.log
@@ -65,7 +70,8 @@ meta/tests.log
 meta/tests.trs
 
 syncd/test-suite.log
-syncd/tests
+syncd/sai_warmboot.bin
+syncd/tests/sai_warmboot.bin
 
 tests/applyview.log
 tests/brcm.pl.log
@@ -96,8 +102,12 @@ saiplayer/saiplayer
 saisdkdump/saisdkdump
 syncd/syncd
 syncd/syncd_request_shutdown
+syncd/syncd_tests
+syncd/tests/tests
 tests/syncd
 tests/testclient
+tests/testclient_dash
+tests/testdash_gtest
 tests/tests
 tests/vssyncd
 unittest/lib/tests
@@ -106,7 +116,12 @@ unittest/meta/tests
 unittest/syncd/tests
 unittest/vslib/tests
 unittest/vslib/testslibsaivs
+unittest/proxylib/tests
+unittest/proxylib/testslibsaiproxy
+unittest/saidump/tests
 vslib/tests
+stub/tests
+unittest/stub/stub/testslibsaistub
 
 # Temporary files #
 ###################
@@ -119,8 +134,6 @@ vslib/tests
 **/*.gcov
 
 tests/applyview.log
-tests/sai_warmboot.bin.bak
-tests/sai_warmboot.bin
 tests/[0-9]*
 
 pyext/py2/pysairedis.py

@@ -5,6 +5,8 @@
 #include "sairedis.h"
 #include "sairediscommon.h"
 
+#include <nlohmann/json.hpp>
+
 #include <inttypes.h>
 #include <arpa/inet.h>
 
@@ -13,6 +15,8 @@
 #include <memory>
 
 using namespace saimeta;
+
+using json = nlohmann::json;
 
 TEST(SaiSerialize, transfer_attributes)
 {
@@ -54,13 +58,51 @@ TEST(SaiSerialize, sai_serialize_object_meta_key)
 
     memset(&mk, 0, sizeof(mk));
 
-    for (int32_t i = SAI_OBJECT_TYPE_NULL+1; i < SAI_OBJECT_TYPE_EXTENSIONS_MAX; i++)
+    for (size_t i = 1; i < sai_metadata_enum_sai_object_type_t.valuescount; ++i)
     {
-        mk.objecttype = (sai_object_type_t)i;
+        mk.objecttype = (sai_object_type_t)sai_metadata_enum_sai_object_type_t.values[i];
 
         auto s = sai_serialize_object_meta_key(mk);
 
         sai_deserialize_object_meta_key(s, mk);
+    }
+}
+
+TEST(SaiSerialize, sai_serialize_port_lane_latch_status_list)
+{
+    sai_attribute_t attr;
+
+    memset(&attr, 0, sizeof(attr));
+
+    for (size_t idx = 0 ; idx < sai_metadata_attr_sorted_by_id_name_count; ++idx)
+    {
+        auto meta = sai_metadata_attr_sorted_by_id_name[idx];
+        if(meta->attrvaluetype == SAI_ATTR_VALUE_TYPE_PORT_LANE_LATCH_STATUS_LIST)
+        {
+            attr.id = meta->attrid;
+
+            if (meta->isaclaction)
+            {
+                attr.value.aclaction.enable = true;
+            }
+
+            if (meta->isaclfield)
+            {
+                attr.value.aclfield.enable = true;
+            }
+
+            sai_port_lane_latch_status_t list[1];
+            list[0].lane = 1;
+            list[0].value.changed=true;
+            list[0].value.current_status=true;
+
+            attr.value.portlanelatchstatuslist.count=1;
+            attr.value.portlanelatchstatuslist.list = list;
+
+            auto s = sai_serialize_attr_value(*meta, attr, false);
+
+            sai_deserialize_attr_value(s, *meta, attr, false);
+        }
     }
 }
 
@@ -80,11 +122,15 @@ TEST(SaiSerialize, sai_serialize_attr_value)
             case SAI_ATTR_VALUE_TYPE_TIMESPEC:
             case SAI_ATTR_VALUE_TYPE_PORT_ERR_STATUS_LIST:
             case SAI_ATTR_VALUE_TYPE_PORT_EYE_VALUES_LIST:
+            case SAI_ATTR_VALUE_TYPE_PORT_PAM4_EYE_VALUES_LIST:
             case SAI_ATTR_VALUE_TYPE_FABRIC_PORT_REACHABILITY:
             case SAI_ATTR_VALUE_TYPE_PRBS_RX_STATE:
             case SAI_ATTR_VALUE_TYPE_SEGMENT_LIST:
             case SAI_ATTR_VALUE_TYPE_TLV_LIST:
             case SAI_ATTR_VALUE_TYPE_MAP_LIST:
+            case SAI_ATTR_VALUE_TYPE_PORT_FREQUENCY_OFFSET_PPM_LIST:
+            case SAI_ATTR_VALUE_TYPE_PORT_SNR_LIST:
+            case SAI_ATTR_VALUE_TYPE_ACL_CHAIN_LIST:
                 continue;
 
             default:
@@ -442,6 +488,11 @@ TEST(SaiSerialize, sai_serialize_port_oper_status)
     EXPECT_EQ(sai_serialize_port_oper_status(SAI_PORT_OPER_STATUS_UP), "SAI_PORT_OPER_STATUS_UP");
 }
 
+TEST(SaiSerialize, sai_serialize_port_host_tx_ready)
+{
+    EXPECT_EQ(sai_serialize_port_host_tx_ready(SAI_PORT_HOST_TX_READY_STATUS_READY), "SAI_PORT_HOST_TX_READY_STATUS_READY");
+}
+
 TEST(SaiSerialize, sai_serialize_queue_deadlock_event)
 {
     EXPECT_EQ(sai_serialize_queue_deadlock_event(SAI_QUEUE_PFC_DEADLOCK_EVENT_TYPE_DETECTED),
@@ -451,6 +502,11 @@ TEST(SaiSerialize, sai_serialize_queue_deadlock_event)
 TEST(SaiSerialize, sai_serialize_fdb_event_ntf)
 {
     EXPECT_THROW(sai_serialize_fdb_event_ntf(1, nullptr), std::runtime_error);
+}
+
+TEST(SaiSerialize, sai_serialize_nat_event_ntf)
+{
+    EXPECT_THROW(sai_serialize_nat_event_ntf(1, nullptr), std::runtime_error);
 }
 
 TEST(SaiSerialize, sai_serialize_port_oper_status_ntf)
@@ -486,6 +542,82 @@ TEST(SaiSerialize, sai_serialize_redis_communication_mode)
 {
     EXPECT_EQ(sai_serialize_redis_communication_mode(SAI_REDIS_COMMUNICATION_MODE_REDIS_SYNC),
             REDIS_COMMUNICATION_MODE_REDIS_SYNC_STRING);
+}
+
+TEST(SaiSerialize, sai_serialize_redis_port_attr_id)
+{
+    for (const auto& attr :
+            {SAI_REDIS_PORT_ATTR_LINK_EVENT_DAMPING_ALGORITHM, SAI_REDIS_PORT_ATTR_LINK_EVENT_DAMPING_ALGO_AIED_CONFIG})
+    {
+        sai_redis_port_attr_t deserialized_attr;
+        sai_deserialize_redis_port_attr_id(
+                sai_serialize_redis_port_attr_id(attr), deserialized_attr);
+
+        EXPECT_EQ(deserialized_attr, attr);
+    }
+
+    // Undefined enum.
+    int index = 1000;
+    std::string serialized_attr = sai_serialize_redis_port_attr_id(
+            static_cast<sai_redis_port_attr_t>(SAI_REDIS_PORT_ATTR_LINK_EVENT_DAMPING_ALGO_AIED_CONFIG + index));
+
+    EXPECT_EQ(serialized_attr,
+            std::to_string(SAI_REDIS_PORT_ATTR_LINK_EVENT_DAMPING_ALGO_AIED_CONFIG + index));
+
+    sai_redis_port_attr_t deserialized_attr;
+    sai_deserialize_redis_port_attr_id(serialized_attr, deserialized_attr);
+    EXPECT_EQ(deserialized_attr, SAI_REDIS_PORT_ATTR_LINK_EVENT_DAMPING_ALGO_AIED_CONFIG + index);
+}
+
+TEST(SaiSerialize, sai_serialize_redis_link_event_damping_algorithm)
+{
+    for (const auto& algo : {SAI_REDIS_LINK_EVENT_DAMPING_ALGORITHM_DISABLED,
+                                SAI_REDIS_LINK_EVENT_DAMPING_ALGORITHM_AIED})
+    {
+        sai_redis_link_event_damping_algorithm_t deserialized_algo;
+        sai_deserialize_redis_link_event_damping_algorithm(
+                sai_serialize_redis_link_event_damping_algorithm(algo), deserialized_algo);
+
+        EXPECT_EQ(deserialized_algo, algo);
+    }
+
+    // Undefined enum.
+    int index = 1000;
+    std::string serialized_attr = sai_serialize_redis_link_event_damping_algorithm(
+            static_cast<sai_redis_link_event_damping_algorithm_t>(SAI_REDIS_LINK_EVENT_DAMPING_ALGORITHM_AIED + index));
+
+    EXPECT_EQ(serialized_attr,
+            std::to_string(SAI_REDIS_LINK_EVENT_DAMPING_ALGORITHM_AIED + index));
+
+    sai_redis_link_event_damping_algorithm_t deserialized_attr;
+    sai_deserialize_redis_link_event_damping_algorithm(serialized_attr, deserialized_attr);
+    EXPECT_EQ(deserialized_attr, SAI_REDIS_LINK_EVENT_DAMPING_ALGORITHM_AIED + index);
+}
+
+TEST(SaiSerialize, sai_serialize_redis_link_event_damping_aied_config)
+{
+    SWSS_LOG_ENTER();
+
+    sai_redis_link_event_damping_algo_aied_config_t config = {
+      .max_suppress_time = 500,
+      .suppress_threshold = 2500,
+      .reuse_threshold = 1000,
+      .decay_half_life = 100,
+      .flap_penalty = 100};
+
+    std::string expected = "{\"max_suppress_time\":\"500\",\"suppress_threshold\":\"2500\",\"reuse_threshold\":\"1000\",\"decay_half_life\":\"100\",\"flap_penalty\":\"100\"}";
+    std::string serialized_config = sai_serialize_redis_link_event_damping_aied_config(config);
+
+    EXPECT_EQ(json::parse(serialized_config), json::parse(expected));
+
+    sai_redis_link_event_damping_algo_aied_config_t deserialized_config;
+    sai_deserialize_redis_link_event_damping_aied_config(serialized_config, deserialized_config);
+
+    EXPECT_EQ(deserialized_config.max_suppress_time, config.max_suppress_time);
+    EXPECT_EQ(deserialized_config.suppress_threshold, config.suppress_threshold);
+    EXPECT_EQ(deserialized_config.reuse_threshold, config.reuse_threshold);
+    EXPECT_EQ(deserialized_config.decay_half_life, config.decay_half_life);
+    EXPECT_EQ(deserialized_config.flap_penalty, config.flap_penalty);
 }
 
 TEST(SaiSerialize, sai_deserialize_queue_attr)
@@ -1216,3 +1348,166 @@ TEST(SaiSerialize, serialize_number)
     EXPECT_EQ(sn, -0x12345678);
     EXPECT_EQ(u,   0x12345678);
 }
+
+TEST(SaiSerialize, sai_serialize_prefix_compression_entry)
+{
+    sai_prefix_compression_entry_t e;
+
+    memset(&e, 0, sizeof(e));
+
+    auto s = sai_serialize_prefix_compression_entry(e);
+
+    sai_deserialize_prefix_compression_entry(s, e);
+}
+
+TEST(SaiSerialize, serialize_stat_capability_list)
+{
+    SWSS_LOG_ENTER();
+
+    extern const sai_enum_metadata_t sai_metadata_enum_sai_stats_mode_t;
+    sai_stat_capability_list_t queue_stats_capability;
+    sai_stat_capability_t stat_initializer;
+    stat_initializer.stat_enum = 0;
+    stat_initializer.stat_modes = 0;
+    std::vector<sai_stat_capability_t> qstat_cap_list(2, stat_initializer);
+    queue_stats_capability.count = 2;
+    queue_stats_capability.list = qstat_cap_list.data();
+    queue_stats_capability.list[0].stat_enum = SAI_QUEUE_STAT_WRED_ECN_MARKED_PACKETS;
+    queue_stats_capability.list[0].stat_modes = SAI_STATS_MODE_READ;
+    queue_stats_capability.list[1].stat_enum = SAI_QUEUE_STAT_PACKETS;
+    queue_stats_capability.list[1].stat_modes = SAI_STATS_MODE_READ;
+
+    std::string capab_count = sai_serialize_stats_capability_list(queue_stats_capability, &sai_metadata_enum_sai_stats_mode_t, true);
+    std::string capab_str = sai_serialize_stats_capability_list(queue_stats_capability, &sai_metadata_enum_sai_stats_mode_t, false);
+
+    std::string exp_count_str = "{\"count\":2,\"list\":null}";
+    EXPECT_EQ(capab_count, exp_count_str);
+
+    std::string exp_capab_str = "{\"count\":2,\"list\":[{\"stat_enum\":\"34\",\"stat_modes\":[\"SAI_STATS_MODE_READ\"]},{\"stat_enum\":\"0\",\"stat_modes\":[\"SAI_STATS_MODE_READ\"]}]}";
+    EXPECT_EQ(capab_str, exp_capab_str);
+
+    std::vector<std::string> vec_stat_enum;
+    std::vector<std::string> vec_stat_modes;
+
+    for (uint32_t it = 0; it < queue_stats_capability.count; it++)
+    {
+        vec_stat_enum.push_back(std::to_string(queue_stats_capability.list[it].stat_enum));
+        vec_stat_modes.push_back(std::to_string(queue_stats_capability.list[it].stat_modes));
+    }
+
+    std::ostringstream join_stat_enum;
+    std::copy(vec_stat_enum.begin(), vec_stat_enum.end(), std::ostream_iterator<std::string>(join_stat_enum, ","));
+    auto strCapEnum = join_stat_enum.str();
+
+    std::ostringstream join_stat_modes;
+    std::copy(vec_stat_modes.begin(), vec_stat_modes.end(), std::ostream_iterator<std::string>(join_stat_modes, ","));
+    auto strCapModes = join_stat_modes.str();
+
+    sai_stat_capability_list_t stats_capability;
+    std::vector<sai_stat_capability_t> stat_cap_list(queue_stats_capability.count, stat_initializer);
+    stats_capability.count = queue_stats_capability.count;
+    stats_capability.list = stat_cap_list.data();
+
+    // deserialize
+    EXPECT_THROW(sai_deserialize_stats_capability_list(NULL, strCapEnum, strCapModes), std::runtime_error);
+
+    sai_deserialize_stats_capability_list(&stats_capability, strCapEnum, strCapModes);
+
+    EXPECT_EQ(stats_capability.count, queue_stats_capability.count);
+    EXPECT_EQ(stats_capability.list[0].stat_modes, SAI_STATS_MODE_READ);
+    EXPECT_EQ(stats_capability.list[1].stat_modes, SAI_STATS_MODE_READ);
+    int is_expected_enum = false;
+
+    if ((stats_capability.list[0].stat_enum == SAI_QUEUE_STAT_WRED_ECN_MARKED_PACKETS)||(stats_capability.list[1].stat_enum == SAI_QUEUE_STAT_PACKETS))
+    {
+        is_expected_enum = true;
+    }
+    if ((stats_capability.list[1].stat_enum == SAI_QUEUE_STAT_WRED_ECN_MARKED_PACKETS)||(stats_capability.list[0].stat_enum == SAI_QUEUE_STAT_PACKETS))
+    {
+        is_expected_enum = true;
+    }
+    EXPECT_EQ(is_expected_enum, true);
+}
+
+TEST(SaiSerialize, serialize_stat_st_capability_list)
+{
+    SWSS_LOG_ENTER();
+
+    extern const sai_enum_metadata_t sai_metadata_enum_sai_stats_mode_t;
+    sai_stat_st_capability_list_t queue_stats_capability;
+    sai_stat_st_capability_t stat_initializer;
+    stat_initializer.capability.stat_enum = 0;
+    stat_initializer.capability.stat_modes = 0;
+    stat_initializer.minimal_polling_interval = 0;
+        std::vector<sai_stat_st_capability_t>
+            qstat_cap_list(2, stat_initializer);
+    queue_stats_capability.count = 2;
+    queue_stats_capability.list = qstat_cap_list.data();
+    queue_stats_capability.list[0].capability.stat_enum = SAI_QUEUE_STAT_WRED_ECN_MARKED_PACKETS;
+    queue_stats_capability.list[0].capability.stat_modes = SAI_STATS_MODE_READ;
+    queue_stats_capability.list[0].minimal_polling_interval = 100;
+    queue_stats_capability.list[1].capability.stat_enum = SAI_QUEUE_STAT_PACKETS;
+    queue_stats_capability.list[1].capability.stat_modes = SAI_STATS_MODE_READ;
+    queue_stats_capability.list[1].minimal_polling_interval = 200;
+
+    std::string capab_count = sai_serialize_stats_st_capability_list(queue_stats_capability, &sai_metadata_enum_sai_stats_mode_t, true);
+    std::string capab_str = sai_serialize_stats_st_capability_list(queue_stats_capability, &sai_metadata_enum_sai_stats_mode_t, false);
+
+    std::string exp_count_str = "{\"count\":2,\"list\":null}";
+    EXPECT_EQ(capab_count, exp_count_str);
+
+    std::string exp_capab_str = "{\"count\":2,\"list\":[{\"minimal_polling_interval\":\"100\",\"stat_enum\":\"34\",\"stat_modes\":[\"SAI_STATS_MODE_READ\"]},{\"minimal_polling_interval\":\"200\",\"stat_enum\":\"0\",\"stat_modes\":[\"SAI_STATS_MODE_READ\"]}]}";
+    EXPECT_EQ(capab_str, exp_capab_str);
+
+    std::vector<std::string> vec_stat_enum;
+    std::vector<std::string> vec_stat_modes;
+    std::vector<std::string> vec_minimal_polling_intervals;
+
+    for (uint32_t it = 0; it < queue_stats_capability.count; it++)
+    {
+        vec_stat_enum.push_back(std::to_string(queue_stats_capability.list[it].capability.stat_enum));
+        vec_stat_modes.push_back(std::to_string(queue_stats_capability.list[it].capability.stat_modes));
+        vec_minimal_polling_intervals.push_back(std::to_string(queue_stats_capability.list[it].minimal_polling_interval));
+    }
+
+    std::ostringstream join_stat_enum;
+    std::copy(vec_stat_enum.begin(), vec_stat_enum.end(), std::ostream_iterator<std::string>(join_stat_enum, ","));
+    auto strCapEnum = join_stat_enum.str();
+
+    std::ostringstream join_stat_modes;
+    std::copy(vec_stat_modes.begin(), vec_stat_modes.end(), std::ostream_iterator<std::string>(join_stat_modes, ","));
+    auto strCapModes = join_stat_modes.str();
+
+    std::ostringstream join_minimal_polling_intervals;
+    std::copy(vec_minimal_polling_intervals.begin(), vec_minimal_polling_intervals.end(), std::ostream_iterator<std::string>(join_minimal_polling_intervals, ","));
+    auto strCapMinPollInt = join_minimal_polling_intervals.str();
+
+    sai_stat_st_capability_list_t stats_capability;
+    std::vector<sai_stat_st_capability_t> stat_cap_list(queue_stats_capability.count, stat_initializer);
+    stats_capability.count = queue_stats_capability.count;
+    stats_capability.list = stat_cap_list.data();
+
+    // deserialize
+    EXPECT_THROW(sai_deserialize_stats_st_capability_list(NULL, strCapEnum, strCapModes, strCapMinPollInt), std::runtime_error);
+
+    sai_deserialize_stats_st_capability_list(&stats_capability, strCapEnum, strCapModes, strCapMinPollInt);
+
+    EXPECT_EQ(stats_capability.count, queue_stats_capability.count);
+    EXPECT_EQ(stats_capability.list[0].capability.stat_modes, SAI_STATS_MODE_READ);
+    EXPECT_EQ(stats_capability.list[1].capability.stat_modes, SAI_STATS_MODE_READ);
+    int is_expected_enum = false;
+
+    if ((stats_capability.list[0].capability.stat_enum == SAI_QUEUE_STAT_WRED_ECN_MARKED_PACKETS)||(stats_capability.list[1].capability.stat_enum == SAI_QUEUE_STAT_PACKETS))
+    {
+        is_expected_enum = true;
+    }
+    if ((stats_capability.list[1].capability.stat_enum == SAI_QUEUE_STAT_WRED_ECN_MARKED_PACKETS)||(stats_capability.list[0].capability.stat_enum == SAI_QUEUE_STAT_PACKETS))
+    {
+        is_expected_enum = true;
+    }
+    EXPECT_EQ(is_expected_enum, true);
+
+    EXPECT_EQ(stats_capability.list[0].minimal_polling_interval, 100);
+    EXPECT_EQ(stats_capability.list[1].minimal_polling_interval, 200);
+}
+

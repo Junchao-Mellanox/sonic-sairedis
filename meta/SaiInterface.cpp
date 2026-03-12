@@ -26,7 +26,7 @@ sai_status_t SaiInterface::create(
         return create(metaKey.objecttype, &metaKey.objectkey.key.object_id, switch_id, attr_count, attr_list);
     }
 
-    switch (info->objecttype)
+    switch ((int)info->objecttype)
     {
         case SAI_OBJECT_TYPE_FDB_ENTRY:
             return create(&metaKey.objectkey.key.fdb_entry, attr_count, attr_list);
@@ -45,6 +45,36 @@ sai_status_t SaiInterface::create(
 
         case SAI_OBJECT_TYPE_MY_SID_ENTRY:
             return create(&metaKey.objectkey.key.my_sid_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_DIRECTION_LOOKUP_ENTRY:
+            return create(&metaKey.objectkey.key.direction_lookup_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_ENI_ETHER_ADDRESS_MAP_ENTRY:
+            return create(&metaKey.objectkey.key.eni_ether_address_map_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_VIP_ENTRY:
+            return create(&metaKey.objectkey.key.vip_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_INBOUND_ROUTING_ENTRY:
+            return create(&metaKey.objectkey.key.inbound_routing_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_PA_VALIDATION_ENTRY:
+            return create(&metaKey.objectkey.key.pa_validation_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_ROUTING_ENTRY:
+            return create(&metaKey.objectkey.key.outbound_routing_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
+            return create(&metaKey.objectkey.key.outbound_ca_to_pa_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return create(&metaKey.objectkey.key.outbound_port_map_port_range_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return create(&metaKey.objectkey.key.global_trusted_vni_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return create(&metaKey.objectkey.key.eni_trusted_vni_entry, attr_count, attr_list);
 
         default:
 
@@ -73,7 +103,7 @@ sai_status_t SaiInterface::remove(
         return remove(metaKey.objecttype, metaKey.objectkey.key.object_id);
     }
 
-    switch (info->objecttype)
+    switch ((int)info->objecttype)
     {
         case SAI_OBJECT_TYPE_FDB_ENTRY:
             return remove(&metaKey.objectkey.key.fdb_entry);
@@ -92,6 +122,36 @@ sai_status_t SaiInterface::remove(
 
         case SAI_OBJECT_TYPE_MY_SID_ENTRY:
             return remove(&metaKey.objectkey.key.my_sid_entry);
+
+        case SAI_OBJECT_TYPE_DIRECTION_LOOKUP_ENTRY:
+            return remove(&metaKey.objectkey.key.direction_lookup_entry);
+
+        case SAI_OBJECT_TYPE_ENI_ETHER_ADDRESS_MAP_ENTRY:
+            return remove(&metaKey.objectkey.key.eni_ether_address_map_entry);
+
+        case SAI_OBJECT_TYPE_VIP_ENTRY:
+            return remove(&metaKey.objectkey.key.vip_entry);
+
+        case SAI_OBJECT_TYPE_INBOUND_ROUTING_ENTRY:
+            return remove(&metaKey.objectkey.key.inbound_routing_entry);
+
+        case SAI_OBJECT_TYPE_PA_VALIDATION_ENTRY:
+            return remove(&metaKey.objectkey.key.pa_validation_entry);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_ROUTING_ENTRY:
+            return remove(&metaKey.objectkey.key.outbound_routing_entry);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
+            return remove(&metaKey.objectkey.key.outbound_ca_to_pa_entry);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return remove(&metaKey.objectkey.key.outbound_port_map_port_range_entry);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return remove(&metaKey.objectkey.key.global_trusted_vni_entry);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return remove(&metaKey.objectkey.key.eni_trusted_vni_entry);
 
         default:
 
@@ -121,7 +181,7 @@ sai_status_t SaiInterface::set(
         return set(metaKey.objecttype, metaKey.objectkey.key.object_id, attr);
     }
 
-    switch (info->objecttype)
+    switch ((int)info->objecttype)
     {
         case SAI_OBJECT_TYPE_FDB_ENTRY:
             return set(&metaKey.objectkey.key.fdb_entry, attr);
@@ -140,6 +200,36 @@ sai_status_t SaiInterface::set(
 
         case SAI_OBJECT_TYPE_MY_SID_ENTRY:
             return set(&metaKey.objectkey.key.my_sid_entry, attr);
+
+        case SAI_OBJECT_TYPE_DIRECTION_LOOKUP_ENTRY:
+            return set(&metaKey.objectkey.key.direction_lookup_entry, attr);
+
+        case SAI_OBJECT_TYPE_ENI_ETHER_ADDRESS_MAP_ENTRY:
+            return set(&metaKey.objectkey.key.eni_ether_address_map_entry, attr);
+
+        case SAI_OBJECT_TYPE_VIP_ENTRY:
+            return set(&metaKey.objectkey.key.vip_entry, attr);
+
+        case SAI_OBJECT_TYPE_INBOUND_ROUTING_ENTRY:
+            return set(&metaKey.objectkey.key.inbound_routing_entry, attr);
+
+        case SAI_OBJECT_TYPE_PA_VALIDATION_ENTRY:
+            return set(&metaKey.objectkey.key.pa_validation_entry, attr);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_ROUTING_ENTRY:
+            return set(&metaKey.objectkey.key.outbound_routing_entry, attr);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
+            return set(&metaKey.objectkey.key.outbound_ca_to_pa_entry, attr);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return set(&metaKey.objectkey.key.outbound_port_map_port_range_entry, attr);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return set(&metaKey.objectkey.key.global_trusted_vni_entry, attr);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return set(&metaKey.objectkey.key.eni_trusted_vni_entry, attr);
 
         default:
 
@@ -170,7 +260,7 @@ sai_status_t SaiInterface::get(
         return get(metaKey.objecttype, metaKey.objectkey.key.object_id, attr_count, attr_list);
     }
 
-    switch (info->objecttype)
+    switch ((int)info->objecttype)
     {
         case SAI_OBJECT_TYPE_FDB_ENTRY:
             return get(&metaKey.objectkey.key.fdb_entry, attr_count, attr_list);
@@ -189,6 +279,36 @@ sai_status_t SaiInterface::get(
 
         case SAI_OBJECT_TYPE_MY_SID_ENTRY:
             return get(&metaKey.objectkey.key.my_sid_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_DIRECTION_LOOKUP_ENTRY:
+            return get(&metaKey.objectkey.key.direction_lookup_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_ENI_ETHER_ADDRESS_MAP_ENTRY:
+            return get(&metaKey.objectkey.key.eni_ether_address_map_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_VIP_ENTRY:
+            return get(&metaKey.objectkey.key.vip_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_INBOUND_ROUTING_ENTRY:
+            return get(&metaKey.objectkey.key.inbound_routing_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_PA_VALIDATION_ENTRY:
+            return get(&metaKey.objectkey.key.pa_validation_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_ROUTING_ENTRY:
+            return get(&metaKey.objectkey.key.outbound_routing_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
+            return get(&metaKey.objectkey.key.outbound_ca_to_pa_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY:
+            return get(&metaKey.objectkey.key.outbound_port_map_port_range_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_GLOBAL_TRUSTED_VNI_ENTRY:
+            return get(&metaKey.objectkey.key.global_trusted_vni_entry, attr_count, attr_list);
+
+        case SAI_OBJECT_TYPE_ENI_TRUSTED_VNI_ENTRY:
+            return get(&metaKey.objectkey.key.eni_trusted_vni_entry, attr_count, attr_list);
 
         default:
 
@@ -244,4 +364,70 @@ sai_status_t SaiInterface::switchMdioCl22Write(
     SWSS_LOG_ENTER();
 
     return SAI_STATUS_FAILURE;
+}
+
+sai_log_level_t SaiInterface::logGet(
+        _In_ sai_api_t api)
+{
+    SWSS_LOG_ENTER();
+
+    // default for all apis
+
+    return SAI_LOG_LEVEL_NOTICE;
+}
+
+sai_status_t SaiInterface::getStats(
+        _In_ const sai_meter_bucket_entry_t* entry,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _Out_ uint64_t *counters)
+{
+    SWSS_LOG_ENTER();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t SaiInterface::getStatsExt(
+        _In_ const sai_meter_bucket_entry_t* entry,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Out_ uint64_t *counters)
+{
+    SWSS_LOG_ENTER();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t SaiInterface::clearStats(
+        _In_ const sai_meter_bucket_entry_t* entry,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids)
+{
+    SWSS_LOG_ENTER();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+std::shared_ptr<SaiOptions> SaiInterface::getOptions(
+        _In_ const std::string& key)
+{
+    SWSS_LOG_ENTER();
+
+    return m_optionsMap[key];
+}
+
+void SaiInterface::setOptions(
+        _In_ const std::string& key,
+        _In_ std::shared_ptr<SaiOptions> options)
+{
+    SWSS_LOG_ENTER();
+
+    m_optionsMap[key] = options;
 }

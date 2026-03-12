@@ -19,9 +19,9 @@ std::shared_ptr<CommandLineOptions> CommandLineOptionsParser::parseCommandLine(
     auto options = std::make_shared<CommandLineOptions>();
 
 #ifdef SAITHRIFT
-    const char* const optstring = "dp:t:g:x:b:uSUCsz:lrm:h";
+    const char* const optstring = "dp:t:g:x:b:B:aw:uSUCsz:lrm:h";
 #else
-    const char* const optstring = "dp:t:g:x:b:uSUCsz:lh";
+    const char* const optstring = "dp:t:g:x:b:B:aw:uSUCsz:lh";
 #endif // SAITHRIFT
 
     while (true)
@@ -41,6 +41,9 @@ std::shared_ptr<CommandLineOptions> CommandLineOptionsParser::parseCommandLine(
             { "globalContext",           required_argument, 0, 'g' },
             { "contextContig",           required_argument, 0, 'x' },
             { "breakConfig",             required_argument, 0, 'b' },
+            { "watchdogWarnTimeSpan",    optional_argument, 0, 'w' },
+            { "supportingBulkCounters",  required_argument, 0, 'B' },
+            { "enableAttrVersionCheck",  no_argument,       0, 'a' },
 #ifdef SAITHRIFT
             { "rpcserver",               no_argument,       0, 'r' },
             { "portmap",                 required_argument, 0, 'm' },
@@ -119,6 +122,10 @@ std::shared_ptr<CommandLineOptions> CommandLineOptionsParser::parseCommandLine(
                 options->m_breakConfig = std::string(optarg);
                 break;
 
+            case 'w':
+                options->m_watchdogWarnTimeSpan = (int64_t)std::stoll(optarg);
+                break;
+
 #ifdef SAITHRIFT
             case 'r':
                 options->m_runRPCServer = true;
@@ -127,6 +134,14 @@ std::shared_ptr<CommandLineOptions> CommandLineOptionsParser::parseCommandLine(
                 options->m_portMapFile = std::string(optarg);
                 break;
 #endif // SAITHRIFT
+
+            case 'B':
+                options->m_supportingBulkCounterGroups = std::string(optarg);
+                break;
+
+            case 'a':
+                options->m_enableAttrVersionCheck = true;
+                break;
 
             case 'h':
                 printUsage();
@@ -151,9 +166,9 @@ void CommandLineOptionsParser::printUsage()
     SWSS_LOG_ENTER();
 
 #ifdef SAITHRIFT
-    std::cout << "Usage: syncd [-d] [-p profile] [-t type] [-u] [-S] [-U] [-C] [-s] [-z mode] [-l] [-g idx] [-x contextConfig] [-b breakConfig] [-r] [-m portmap] [-h]" << std::endl;
+    std::cout << "Usage: syncd [-d] [-p profile] [-t type] [-u] [-S] [-U] [-C] [-s] [-z mode] [-l] [-g idx] [-x contextConfig] [-b breakConfig] [-B supportingBulkCounters] [-r] [-m portmap] [-h]" << std::endl;
 #else
-    std::cout << "Usage: syncd [-d] [-p profile] [-t type] [-u] [-S] [-U] [-C] [-s] [-z mode] [-l] [-g idx] [-x contextConfig] [-b breakConfig] [-h]" << std::endl;
+    std::cout << "Usage: syncd [-d] [-p profile] [-t type] [-u] [-S] [-U] [-C] [-s] [-z mode] [-l] [-g idx] [-x contextConfig] [-b breakConfig] [-B supportingBulkCounters] [-h]" << std::endl;
 #endif // SAITHRIFT
 
     std::cout << "    -d --diag" << std::endl;
@@ -161,7 +176,7 @@ void CommandLineOptionsParser::printUsage()
     std::cout << "    -p --profile profile" << std::endl;
     std::cout << "        Provide profile map file" << std::endl;
     std::cout << "    -t --startType type" << std::endl;
-    std::cout << "        Specify start type (cold|warm|fast|fastfast) " << std::endl;
+    std::cout << "        Specify start type (cold|warm|fast|fastfast|express)" << std::endl;
     std::cout << "    -u --useTempView" << std::endl;
     std::cout << "        Use temporary view between init and apply" << std::endl;
     std::cout << "    -S --disableExitSleep" << std::endl;
@@ -182,6 +197,12 @@ void CommandLineOptionsParser::printUsage()
     std::cout << "        Context configuration file" << std::endl;
     std::cout << "    -b --breakConfig" << std::endl;
     std::cout << "        Comparison logic 'break before make' configuration file" << std::endl;
+    std::cout << "    -w --watchdogWarnTimeSpan" << std::endl;
+    std::cout << "        Watchdog time span (in microseconds) to watch for execution" << std::endl;
+    std::cout << "    -B --supportingBulkCounters" << std::endl;
+    std::cout << "        Counter groups those support bulk polling" << std::endl;
+    std::cout << "    -a --enableAttrVersionCheck" << std::endl;
+    std::cout << "        Enable attribute SAI version check when performing SAI discovery" << std::endl;
 
 #ifdef SAITHRIFT
 

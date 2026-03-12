@@ -48,7 +48,7 @@ namespace saivs
 
         public:
 
-            sai_status_t getStatsExt(
+            virtual sai_status_t getStatsExt(
                     _In_ sai_object_type_t obejct_type,
                     _In_ sai_object_id_t object_id,
                     _In_ uint32_t number_of_counters,
@@ -60,6 +60,11 @@ namespace saivs
                     _In_ sai_object_id_t switchId,
                     _In_ sai_object_type_t objectType,
                     _Inout_ sai_stat_capability_list_t *stats_capability);
+
+            sai_status_t queryStatsStCapability(
+                _In_ sai_object_id_t switch_id,
+                _In_ sai_object_type_t object_type,
+                _Inout_ sai_stat_st_capability_list_t *stats_capability);
 
         public:
 
@@ -85,6 +90,18 @@ namespace saivs
             bool  getTapNameFromPortId(
                     _In_ const sai_object_id_t port_id,
                     _Out_ std::string& if_name);
+
+        private:
+
+            sai_status_t getPortStat(
+                    _In_ sai_object_id_t portId,
+                    _In_ const sai_stat_id_t counterId,
+                    _Out_ uint64_t& counter);
+
+           sai_status_t getNetStat(
+                   _In_ sai_stat_id_t counterId,
+                   _In_ std::string& ifName,
+                   _Out_ uint64_t& counter);
 
         protected:
 
@@ -117,6 +134,10 @@ namespace saivs
             uint64_t m_linkCallbackIndex;
 
             std::mutex m_mutex;
+
+        private : // port counter mapping
+
+            static const std::map<sai_stat_id_t, std::string> m_statIdMap;
 
         protected:
 

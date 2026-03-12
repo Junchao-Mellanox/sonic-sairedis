@@ -6,7 +6,6 @@ LDADD_GTEST = -L/usr/src/gtest -lgtest -lgtest_main
 
 tests_SOURCES = \
 				main.cpp \
-				../../meta/DummySaiInterface.cpp \
 				../../meta/MetaTestSaiInterface.cpp \
 				../../lib/VirtualObjectIdManager.cpp \
 				../../lib/SwitchConfig.cpp \
@@ -15,15 +14,22 @@ tests_SOURCES = \
 				../../lib/Channel.cpp \
 				MockMeta.cpp \
 				TestAttrKeyMap.cpp \
+				TestDummySaiInterface.cpp \
 				TestGlobals.cpp \
 				TestMetaKeyHasher.cpp \
 				TestNotificationFactory.cpp \
 				TestNotificationFdbEvent.cpp \
+				TestNotificationNatEvent.cpp \
 				TestNotificationPortStateChange.cpp \
 				TestNotificationQueuePfcDeadlock.cpp \
 				TestNotificationSwitchShutdownRequest.cpp \
+				TestNotificationSwitchAsicSdkHealthEvent.cpp \
 				TestNotificationSwitchStateChange.cpp \
 				TestNotificationBfdSessionStateChange.cpp \
+				TestNotificationIcmpEchoSessionStateChange.cpp \
+				TestNotificationHaScopeEvent.cpp \
+				TestNotificationHaSetEvent.cpp \
+				TestNotificationTam.cpp \
 				TestOidRefCounter.cpp \
 				TestPerformanceIntervalTimer.cpp \
 				TestPortRelatedSet.cpp \
@@ -40,7 +46,8 @@ tests_SOURCES = \
 				TestLegacyRouteEntry.cpp \
 				TestLegacyOther.cpp \
 				TestZeroMQSelectableChannel.cpp \
-				TestMeta.cpp
+				TestMeta.cpp \
+				TestMetaDash.cpp
 
 tests_CXXFLAGS = $(DBGFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS_COMMON)
 tests_LDADD = $(LDADD_GTEST) -lhiredis -lswsscommon -lpthread -L$(top_srcdir)/meta/.libs -lsaimetadata -lsaimeta -lzmq $(CODE_COVERAGE_LIBS)

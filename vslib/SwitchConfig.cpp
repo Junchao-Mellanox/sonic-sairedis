@@ -3,6 +3,8 @@
 
 #include "swss/logger.h"
 
+#include <boost/algorithm/string/join.hpp>
+
 #include <cstring>
 
 using namespace saivs;
@@ -15,7 +17,9 @@ SwitchConfig::SwitchConfig(
     m_bootType(SAI_VS_BOOT_TYPE_COLD),
     m_switchIndex(switchIndex),
     m_hardwareInfo(hwinfo),
-    m_useTapDevice(false)
+    m_useTapDevice(false),
+    m_bfdOffload(true),
+    m_useConfiguredSpeedAsOperSpeed(false)
 {
     SWSS_LOG_ENTER();
 
@@ -75,14 +79,38 @@ bool SwitchConfig::parseSwitchType(
     {
         switchType = SAI_VS_SWITCH_TYPE_MLNX2700;
     }
+    else if (st == SAI_VALUE_VS_SWITCH_TYPE_NVDA_MBF2H536C)
+    {
+        switchType = SAI_VS_SWITCH_TYPE_NVDA_MBF2H536C;
+    }
+    else if (st == SAI_VALUE_VS_SWITCH_TYPE_DPU_SIMU_2P)
+    {
+        /*
+         * TODO: Temporarily set switchType to SAI_VS_SWITCH_TYPE_NVDA_MBF2H536C
+         * for 2-port DPU. This will need to be revisited when there are other
+         * DPU types.
+         */
+        switchType = SAI_VS_SWITCH_TYPE_NVDA_MBF2H536C;
+    }
+    else if (st == SAI_VALUE_VS_SWITCH_TYPE_VPP)
+    {
+        switchType = SAI_VS_SWITCH_TYPE_VPP;
+    }
     else
     {
-        SWSS_LOG_ERROR("unknown switch type: '%s', expected (%s|%s|%s|%s)",
-                switchTypeStr,
+        std::vector<std::string> vals {
                 SAI_VALUE_VS_SWITCH_TYPE_BCM81724,
                 SAI_VALUE_VS_SWITCH_TYPE_BCM56850,
                 SAI_VALUE_VS_SWITCH_TYPE_BCM56971B0,
-                SAI_VALUE_VS_SWITCH_TYPE_MLNX2700);
+                SAI_VALUE_VS_SWITCH_TYPE_MLNX2700,
+                SAI_VALUE_VS_SWITCH_TYPE_NVDA_MBF2H536C,
+                SAI_VALUE_VS_SWITCH_TYPE_DPU_SIMU_2P
+                SAI_VALUE_VS_SWITCH_TYPE_VPP,
+        };
+
+        SWSS_LOG_ERROR("unknown switch type: '%s', expected (%s)",
+                switchTypeStr,
+                boost::algorithm::join(vals, "|").c_str());
 
         return false;
     }
@@ -120,15 +148,28 @@ bool SwitchConfig::parseBootType(
     return true;
 }
 
-bool SwitchConfig::parseUseTapDevice(
-        _In_ const char* useTapDeviceStr)
+bool SwitchConfig::parseBool(
+        _In_ const char* str)
 {
     SWSS_LOG_ENTER();
 
-    if (useTapDeviceStr)
+    if (str)
     {
-        return strcmp(useTapDeviceStr, "true") == 0;
+        return strcmp(str, "true") == 0;
     }
 
     return false;
+}
+
+bool SwitchConfig::parseBfdOffloadSupported(
+    _In_ const char* bfdOffloadSupportedStr)
+{
+    SWSS_LOG_ENTER();
+
+    if (bfdOffloadSupportedStr)
+    {
+        return strcmp(bfdOffloadSupportedStr, "true") == 0;
+    }
+
+    return true;
 }

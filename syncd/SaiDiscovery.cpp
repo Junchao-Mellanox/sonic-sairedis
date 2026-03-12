@@ -1,4 +1,5 @@
 #include "SaiDiscovery.h"
+#include "VendorSaiOptions.h"
 
 #include "swss/logger.h"
 
@@ -19,12 +20,38 @@ using namespace syncd;
 #define SAI_DISCOVERY_LIST_MAX_ELEMENTS 1024
 
 SaiDiscovery::SaiDiscovery(
-        _In_ std::shared_ptr<sairedis::SaiInterface> sai):
-    m_sai(sai)
+        _In_ std::shared_ptr<sairedis::SaiInterface> sai,
+        _In_ Flags flags):
+    m_sai(sai),
+    m_flags(flags)
 {
     SWSS_LOG_ENTER();
 
-    // empty
+    sai_api_version_t version = SAI_VERSION(0,0,0);
+
+    sai_status_t status = m_sai->queryApiVersion(&version);
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        auto vso = std::dynamic_pointer_cast<VendorSaiOptions>(sai->getOptions(VendorSaiOptions::OPTIONS_KEY));
+
+        // TODO check vso for null
+
+        m_attrVersionChecker.enable(vso->m_checkAttrVersion);
+        m_attrVersionChecker.setSaiApiVersion(version);
+
+        SWSS_LOG_NOTICE("check attr version %s, libsai api version: %lu",
+                (vso->m_checkAttrVersion ? "ENABLED" : "DISABLED"),
+                version);
+    }
+    else
+    {
+        m_attrVersionChecker.enable(false);
+        m_attrVersionChecker.setSaiApiVersion(SAI_API_VERSION);
+
+        SWSS_LOG_WARN("failed to obtain libsai api version: %s, will discover all attributes",
+                sai_serialize_status(status).c_str());
+    }
 }
 
 SaiDiscovery::~SaiDiscovery()
@@ -87,6 +114,13 @@ void SaiDiscovery::discover(
         discovered.insert(rid);
     }
 
+#ifdef SKIP_SAI_PORT_DISCOVERY
+    if (ot == SAI_OBJECT_TYPE_PORT)
+    {
+        return;
+    }
+#endif
+
     const sai_object_type_info_t *info = sai_metadata_get_object_type_info(ot);
 
     /*
@@ -110,6 +144,11 @@ void SaiDiscovery::discover(
 
         attr.id = md->attrid;
 
+        if (!m_attrVersionChecker.isSufficientVersion(md))
+        {
+            continue;
+        }
+
         if (md->attrvaluetype == SAI_ATTR_VALUE_TYPE_OBJECT_ID)
         {
             if (md->defaultvaluetype == SAI_DEFAULT_VALUE_TYPE_CONST)
@@ -120,7 +159,10 @@ void SaiDiscovery::discover(
                  * create, we don't need to query this attribute.
                  */
 
-                //continue;
+                if (m_flags & Flags::SkipDefaultEmptyAttributes)
+                {
+                    continue;
+                }
             }
 
             if (md->objecttype == SAI_OBJECT_TYPE_STP &&
@@ -197,7 +239,10 @@ void SaiDiscovery::discover(
                  * create, we don't need to query this attribute.
                  */
 
-                //continue;
+                if (m_flags & Flags::SkipDefaultEmptyAttributes)
+                {
+                    continue;
+                }
             }
 
             SWSS_LOG_DEBUG("getting %s for %s", md->attridname,
@@ -252,6 +297,15 @@ std::set<sai_object_id_t> SaiDiscovery::discover(
 {
     SWSS_LOG_ENTER();
 
+    return discover(1, &startRid);
+}
+
+std::set<sai_object_id_t> SaiDiscovery::discover(
+        _In_ size_t count,
+        _In_ const sai_object_id_t* rids)
+{
+    SWSS_LOG_ENTER();
+
     /*
      * Preform discovery on the switch to obtain ASIC view of
      * objects that are created internally.
@@ -259,16 +313,23 @@ std::set<sai_object_id_t> SaiDiscovery::discover(
 
     m_defaultOidMap.clear();
 
+    m_attrVersionChecker.reset();
+
     std::set<sai_object_id_t> discovered_rids;
 
     {
         SWSS_LOG_TIMER("discover");
 
+        auto levels = getApiLogLevel();
+
         setApiLogLevel(SAI_LOG_LEVEL_CRITICAL);
 
-        discover(startRid, discovered_rids);
+        for (size_t idx = 0; idx < count; idx++)
+        {
+            discover(rids[idx], discovered_rids);
+        }
 
-        setApiLogLevel(SAI_LOG_LEVEL_NOTICE);
+        setApiLogLevel(levels);
     }
 
     SWSS_LOG_NOTICE("discovered objects count: %zu", discovered_rids.size());
@@ -307,19 +368,63 @@ void SaiDiscovery::setApiLogLevel(
 
     // We start from 1 since 0 is SAI_API_UNSPECIFIED.
 
-    for (uint32_t api = 1; api < sai_metadata_enum_sai_api_t.valuescount; ++api)
+    for (uint32_t idx = 1; idx < sai_metadata_enum_sai_api_t.valuescount; ++idx)
     {
-        sai_status_t status = m_sai->logSet((sai_api_t)api, logLevel);
+        sai_status_t status = m_sai->logSet((sai_api_t)sai_metadata_enum_sai_api_t.values[idx], logLevel);
 
         if (status == SAI_STATUS_SUCCESS)
         {
             SWSS_LOG_INFO("setting SAI loglevel %s on %s",
                     sai_serialize_log_level(logLevel).c_str(),
-                    sai_serialize_api((sai_api_t)api).c_str());
+                    sai_serialize_api((sai_api_t)sai_metadata_enum_sai_api_t.values[idx]).c_str());
         }
         else
         {
             SWSS_LOG_INFO("set loglevel failed: %s", sai_serialize_status(status).c_str());
         }
     }
+}
+
+void SaiDiscovery::setApiLogLevel(
+        _In_ const std::map<sai_api_t, sai_log_level_t>& levels)
+{
+    SWSS_LOG_ENTER();
+
+    // We start from 1 since 0 is SAI_API_UNSPECIFIED.
+
+    for (uint32_t idx = 1; idx < sai_metadata_enum_sai_api_t.valuescount; ++idx)
+    {
+        auto it = levels.find((sai_api_t)sai_metadata_enum_sai_api_t.values[idx]);
+
+        sai_log_level_t logLevel = (it == levels.end()) ? SAI_LOG_LEVEL_NOTICE : it->second;
+
+        sai_status_t status = m_sai->logSet((sai_api_t)sai_metadata_enum_sai_api_t.values[idx], logLevel);
+
+        if (status == SAI_STATUS_SUCCESS)
+        {
+            SWSS_LOG_INFO("setting SAI loglevel %s on %s",
+                    sai_serialize_log_level(logLevel).c_str(),
+                    sai_serialize_api((sai_api_t)sai_metadata_enum_sai_api_t.values[idx]).c_str());
+        }
+        else
+        {
+            SWSS_LOG_INFO("set loglevel failed: %s", sai_serialize_status(status).c_str());
+        }
+    }
+}
+
+std::map<sai_api_t, sai_log_level_t> SaiDiscovery::getApiLogLevel()
+{
+    SWSS_LOG_ENTER();
+
+    std::map<sai_api_t, sai_log_level_t> levels;
+
+    // We start from 1 since 0 is SAI_API_UNSPECIFIED.
+
+    for (uint32_t idx = 1; idx < sai_metadata_enum_sai_api_t.valuescount; ++idx)
+    {
+        levels[(sai_api_t)sai_metadata_enum_sai_api_t.values[idx]] = m_sai->logGet((sai_api_t)sai_metadata_enum_sai_api_t.values[idx]);
+    }
+
+    return levels;
 }

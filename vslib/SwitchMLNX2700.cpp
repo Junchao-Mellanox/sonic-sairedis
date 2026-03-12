@@ -41,16 +41,18 @@ sai_status_t SwitchMLNX2700::create_qos_queues_per_port(
     {
         sai_object_id_t queue_id;
 
-        sai_attribute_t attr[2];
+        sai_attribute_t attr[3];
 
         attr[0].id = SAI_QUEUE_ATTR_INDEX;
         attr[0].value.u8 = (uint8_t)i;
         attr[1].id = SAI_QUEUE_ATTR_PORT;
         attr[1].value.oid = port_id;
+        attr[2].id = SAI_QUEUE_ATTR_TYPE;
+        attr[2].value.s32 = (i < port_qos_queues_count / 2) ?  SAI_QUEUE_TYPE_UNICAST : SAI_QUEUE_TYPE_MULTICAST;
 
         // TODO add type
 
-        CHECK_STATUS(create(SAI_OBJECT_TYPE_QUEUE, &queue_id, m_switch_id, 2, attr));
+        CHECK_STATUS(create(SAI_OBJECT_TYPE_QUEUE, &queue_id, m_switch_id, 3, attr));
 
         queues.push_back(queue_id);
     }
@@ -456,6 +458,18 @@ sai_status_t SwitchMLNX2700::queryTunnelPeerModeCapability(
 
     enum_values_capability->count = 1;
     enum_values_capability->list[0] = SAI_TUNNEL_PEER_MODE_P2MP;
+    return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t SwitchMLNX2700::queryPortAutonegFecOverrideSupportCapability(
+                   _Out_ sai_attr_capability_t *attr_capability)
+{
+    SWSS_LOG_ENTER();
+
+    attr_capability->create_implemented = true;
+    attr_capability->set_implemented    = true;
+    attr_capability->get_implemented    = true;
+
     return SAI_STATUS_SUCCESS;
 }
 

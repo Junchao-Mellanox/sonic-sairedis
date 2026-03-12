@@ -39,13 +39,13 @@ ServerSai::~ServerSai()
 
     if (m_apiInitialized)
     {
-        uninitialize();
+        apiUninitialize();
     }
 }
 
 // INITIALIZE UNINITIALIZE
 
-sai_status_t ServerSai::initialize(
+sai_status_t ServerSai::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
@@ -79,7 +79,7 @@ sai_status_t ServerSai::initialize(
 
     m_sai = std::make_shared<Sai>(); // actual SAI to talk to syncd
 
-    auto status = m_sai->initialize(flags, service_method_table);
+    auto status = m_sai->apiInitialize(flags, service_method_table);
 
     SWSS_LOG_NOTICE("init client/server sai: %s", sai_serialize_status(status).c_str());
 
@@ -103,7 +103,7 @@ sai_status_t ServerSai::initialize(
     return status;
 }
 
-sai_status_t ServerSai::uninitialize(void)
+sai_status_t ServerSai::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
     REDIS_CHECK_API_INITIALIZED();
@@ -274,9 +274,29 @@ sai_status_t ServerSai::queryStatsCapability(
         _In_ sai_object_type_t objectType,
         _Inout_ sai_stat_capability_list_t *stats_capability)
 {
+    MUTEX();
     SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
 
-    return SAI_STATUS_NOT_IMPLEMENTED;
+    return m_sai->queryStatsCapability(
+            switchId,
+            objectType,
+            stats_capability);
+}
+
+sai_status_t ServerSai::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    return m_sai->queryStatsStCapability(
+        switchId,
+        objectType,
+        stats_capability);
 }
 
 sai_status_t ServerSai::getStatsExt(
@@ -315,6 +335,56 @@ sai_status_t ServerSai::clearStats(
             object_id,
             number_of_counters,
             counter_ids);
+}
+
+sai_status_t ServerSai::bulkGetStats(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_key_t *object_key,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Inout_ sai_status_t *object_statuses,
+        _Out_ uint64_t *counters)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    return m_sai->bulkGetStats(switchId,
+                               object_type,
+                               object_count,
+                               object_key,
+                               number_of_counters,
+                               counter_ids,
+                               mode,
+                               object_statuses,
+                               counters);
+}
+
+sai_status_t ServerSai::bulkClearStats(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_key_t *object_key,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Inout_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    return m_sai->bulkClearStats(switchId,
+                                 object_type,
+                                 object_count,
+                                 object_key,
+                                 number_of_counters,
+                                 counter_ids,
+                                 mode,
+                                 object_statuses);
 }
 
 // BULK QUAD OID
@@ -379,6 +449,29 @@ sai_status_t ServerSai::bulkSet(
             object_type,
             object_count,
             object_id,
+            attr_list,
+            mode,
+            object_statuses);
+}
+
+sai_status_t ServerSai::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    return m_sai->bulkGet(
+            object_type,
+            object_count,
+            object_id,
+            attr_count,
             attr_list,
             mode,
             object_statuses);
@@ -453,6 +546,26 @@ sai_status_t ServerSai::bulkSet(                            \
 
 SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_SET_ENTRY);
 
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t ServerSai::bulkGet(                            \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    MUTEX();                                                \
+    SWSS_LOG_ENTER();                                       \
+    REDIS_CHECK_API_INITIALIZED();                          \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY);
+
 // NON QUAD API
 
 sai_status_t ServerSai::flushFdbEntries(
@@ -505,7 +618,7 @@ sai_status_t ServerSai::queryAttributeCapability(
             capability);
 }
 
-sai_status_t ServerSai::queryAattributeEnumValuesCapability(
+sai_status_t ServerSai::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switch_id,
         _In_ sai_object_type_t object_type,
         _In_ sai_attr_id_t attr_id,
@@ -515,7 +628,7 @@ sai_status_t ServerSai::queryAattributeEnumValuesCapability(
     SWSS_LOG_ENTER();
     REDIS_CHECK_API_INITIALIZED();
 
-    return m_sai->queryAattributeEnumValuesCapability(
+    return m_sai->queryAttributeEnumValuesCapability(
             switch_id,
             object_type,
             attr_id,
@@ -561,6 +674,16 @@ sai_status_t ServerSai::logSet(
     REDIS_CHECK_API_INITIALIZED();
 
     return m_sai->logSet(api, log_level);
+}
+
+sai_status_t ServerSai::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    return m_sai->queryApiVersion(version);
 }
 
 void ServerSai::serverThreadFunction()
@@ -678,6 +801,12 @@ sai_status_t ServerSai::processSingleEvent(
 
     if (op == REDIS_ASIC_STATE_COMMAND_OBJECT_TYPE_GET_AVAILABILITY_QUERY)
         return processObjectTypeGetAvailabilityQuery(kco);
+
+    if (op == REDIS_ASIC_STATE_COMMAND_STATS_CAPABILITY_QUERY)
+        return processStatsCapabilityQuery(kco);
+
+    if (op == REDIS_ASIC_STATE_COMMAND_STATS_ST_CAPABILITY_QUERY)
+        return processStatsStCapabilityQuery(kco);
 
     SWSS_LOG_THROW("event op '%s' is not implemented, FIXME", op.c_str());
 }
@@ -1187,7 +1316,7 @@ sai_status_t ServerSai::processBulkCreateEntry(
         attr_lists[idx] = attributes[idx]->get_attr_list();
     }
 
-    switch (objectType)
+    switch ((int)objectType)
     {
         case SAI_OBJECT_TYPE_ROUTE_ENTRY:
         {
@@ -1272,6 +1401,139 @@ sai_status_t ServerSai::processBulkCreateEntry(
             for (uint32_t it = 0; it < object_count; it++)
             {
                 sai_deserialize_my_sid_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkCreate(
+                    object_count,
+                    entries.data(),
+                    attr_counts.data(),
+                    attr_lists.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_DIRECTION_LOOKUP_ENTRY:
+        {
+            std::vector<sai_direction_lookup_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_direction_lookup_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkCreate(
+                    object_count,
+                    entries.data(),
+                    attr_counts.data(),
+                    attr_lists.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_ENI_ETHER_ADDRESS_MAP_ENTRY:
+        {
+            std::vector<sai_eni_ether_address_map_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_eni_ether_address_map_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkCreate(
+                    object_count,
+                    entries.data(),
+                    attr_counts.data(),
+                    attr_lists.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_VIP_ENTRY:
+        {
+            std::vector<sai_vip_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_vip_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkCreate(
+                    object_count,
+                    entries.data(),
+                    attr_counts.data(),
+                    attr_lists.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_INBOUND_ROUTING_ENTRY:
+        {
+            std::vector<sai_inbound_routing_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_inbound_routing_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkCreate(
+                    object_count,
+                    entries.data(),
+                    attr_counts.data(),
+                    attr_lists.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_PA_VALIDATION_ENTRY:
+        {
+            std::vector<sai_pa_validation_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_pa_validation_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkCreate(
+                    object_count,
+                    entries.data(),
+                    attr_counts.data(),
+                    attr_lists.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_ROUTING_ENTRY:
+        {
+            std::vector<sai_outbound_routing_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_outbound_routing_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkCreate(
+                    object_count,
+                    entries.data(),
+                    attr_counts.data(),
+                    attr_lists.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
+        {
+            std::vector<sai_outbound_ca_to_pa_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_outbound_ca_to_pa_entry(objectIds[it], entries[it]);
             }
 
             status = m_sai->bulkCreate(
@@ -1304,7 +1566,7 @@ sai_status_t ServerSai::processBulkRemoveEntry(
 
     sai_bulk_op_error_mode_t mode = SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR;
 
-    switch (objectType)
+    switch ((int)objectType)
     {
         case SAI_OBJECT_TYPE_ROUTE_ENTRY:
         {
@@ -1381,6 +1643,119 @@ sai_status_t ServerSai::processBulkRemoveEntry(
             for (uint32_t it = 0; it < object_count; it++)
             {
                 sai_deserialize_my_sid_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkRemove(
+                    object_count,
+                    entries.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_DIRECTION_LOOKUP_ENTRY:
+        {
+            std::vector<sai_direction_lookup_entry_t> entries(object_count);
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_direction_lookup_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkRemove(
+                    object_count,
+                    entries.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_ENI_ETHER_ADDRESS_MAP_ENTRY:
+        {
+            std::vector<sai_eni_ether_address_map_entry_t> entries(object_count);
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_eni_ether_address_map_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkRemove(
+                    object_count,
+                    entries.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_VIP_ENTRY:
+        {
+            std::vector<sai_vip_entry_t> entries(object_count);
+
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_vip_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkRemove(
+                    object_count,
+                    entries.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_INBOUND_ROUTING_ENTRY:
+        {
+            std::vector<sai_inbound_routing_entry_t> entries(object_count);
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_inbound_routing_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkRemove(
+                    object_count,
+                    entries.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_PA_VALIDATION_ENTRY:
+        {
+            std::vector<sai_pa_validation_entry_t> entries(object_count);
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_pa_validation_entry(objectIds[it], entries[it]);
+            }
+
+            status = m_sai->bulkRemove(
+                    object_count,
+                    entries.data(),
+                    mode,
+                    statuses.data());
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_ROUTING_ENTRY:
+        {
+            std::vector<sai_outbound_routing_entry_t> entries(object_count);
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_outbound_routing_entry(objectIds[it], entries[it]);
+            }
+            status = m_sai->bulkRemove(
+                    object_count,
+                    entries.data(),
+                    mode,
+                    statuses.data());
+
+        }
+        break;
+
+        case SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY:
+        {
+            std::vector<sai_outbound_ca_to_pa_entry_t> entries(object_count);
+            for (uint32_t it = 0; it < object_count; it++)
+            {
+                sai_deserialize_outbound_ca_to_pa_entry(objectIds[it], entries[it]);
             }
 
             status = m_sai->bulkRemove(
@@ -1653,7 +2028,7 @@ sai_status_t ServerSai::processAttrEnumValuesCapabilityQuery(
     enumCapList.count = list_size;
     enumCapList.list = enum_capabilities_list.data();
 
-    sai_status_t status = m_sai->queryAattributeEnumValuesCapability(switchOid, objectType, attrId, &enumCapList);
+    sai_status_t status = m_sai->queryAttributeEnumValuesCapability(switchOid, objectType, attrId, &enumCapList);
 
     std::vector<swss::FieldValueTuple> entry;
 
@@ -1727,6 +2102,171 @@ sai_status_t ServerSai::processObjectTypeGetAvailabilityQuery(
     }
 
     m_selectableChannel->set(sai_serialize_status(status), entry, REDIS_ASIC_STATE_COMMAND_OBJECT_TYPE_GET_AVAILABILITY_RESPONSE);
+
+    return status;
+}
+
+sai_status_t ServerSai::processStatsCapabilityQuery(
+        _In_ const swss::KeyOpFieldsValuesTuple &kco)
+{
+    SWSS_LOG_ENTER();
+
+    auto& strSwitchOid = kfvKey(kco);
+
+    sai_object_id_t switchOid;
+    sai_deserialize_object_id(strSwitchOid, switchOid);
+
+    auto& values = kfvFieldsValues(kco);
+
+    if (values.size() != 2)
+    {
+        SWSS_LOG_ERROR("Invalid input: expected 2 arguments, received %zu", values.size());
+
+        m_selectableChannel->set(sai_serialize_status(SAI_STATUS_INVALID_PARAMETER), {}, REDIS_ASIC_STATE_COMMAND_STATS_CAPABILITY_RESPONSE);
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    sai_object_type_t objectType;
+    sai_deserialize_object_type(fvValue(values[0]), objectType);
+
+    uint32_t list_size = std::stoi(fvValue(values[1]));
+
+    std::vector<sai_stat_capability_t> stat_capability_list(list_size);
+
+    sai_stat_capability_list_t statCapList;
+
+    statCapList.count = list_size;
+    statCapList.list = stat_capability_list.data();
+
+    sai_status_t status = m_sai->queryStatsCapability(switchOid, objectType, &statCapList);
+
+    std::vector<swss::FieldValueTuple> entry;
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        std::vector<std::string> vec_stat_enum;
+        std::vector<std::string> vec_stat_modes;
+
+        for (uint32_t it = 0; it < statCapList.count; it++)
+        {
+                vec_stat_enum.push_back(std::to_string(statCapList.list[it].stat_enum));
+                vec_stat_modes.push_back(std::to_string(statCapList.list[it].stat_modes));
+        }
+
+        std::ostringstream join_stat_enum;
+        std::copy(vec_stat_enum.begin(), vec_stat_enum.end(), std::ostream_iterator<std::string>(join_stat_enum, ","));
+        auto strCapEnum = join_stat_enum.str();
+
+        std::ostringstream join_stat_modes;
+        std::copy(vec_stat_modes.begin(), vec_stat_modes.end(), std::ostream_iterator<std::string>(join_stat_modes, ","));
+        auto strCapModes = join_stat_modes.str();
+
+        entry =
+        {
+            swss::FieldValueTuple("STAT_ENUM", strCapEnum),
+            swss::FieldValueTuple("STAT_MODES", strCapModes),
+            swss::FieldValueTuple("STAT_COUNT", std::to_string(statCapList.count))
+        };
+
+        SWSS_LOG_DEBUG("Sending response: stat_enums = '%s', stat_modes = '%s', count = %d",
+                        strCapEnum.c_str(), strCapModes.c_str(), statCapList.count);
+    }
+    else if (status == SAI_STATUS_BUFFER_OVERFLOW)
+    {
+        entry =
+        {
+            swss::FieldValueTuple("STAT_COUNT", std::to_string(statCapList.count))
+        };
+
+        SWSS_LOG_DEBUG("Sending response: count = %u", statCapList.count);
+    }
+
+    m_selectableChannel->set(sai_serialize_status(status), entry, REDIS_ASIC_STATE_COMMAND_STATS_CAPABILITY_RESPONSE);
+
+    return status;
+}
+
+sai_status_t ServerSai::processStatsStCapabilityQuery(
+    _In_ const swss::KeyOpFieldsValuesTuple &kco)
+{
+    SWSS_LOG_ENTER();
+
+    auto &strSwitchOid = kfvKey(kco);
+
+    sai_object_id_t switchOid;
+    sai_deserialize_object_id(strSwitchOid, switchOid);
+
+    auto &values = kfvFieldsValues(kco);
+
+    if (values.size() != 2)
+    {
+        SWSS_LOG_ERROR("Invalid input: expected 2 arguments, received %zu", values.size());
+
+        m_selectableChannel->set(sai_serialize_status(SAI_STATUS_INVALID_PARAMETER), {}, REDIS_ASIC_STATE_COMMAND_STATS_ST_CAPABILITY_RESPONSE);
+
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    sai_object_type_t objectType;
+    sai_deserialize_object_type(fvValue(values[0]), objectType);
+
+    uint32_t list_size = std::stoi(fvValue(values[1]));
+
+    std::vector<sai_stat_st_capability_t> stat_capability_list(list_size);
+
+    sai_stat_st_capability_list_t statCapList;
+
+    statCapList.count = list_size;
+    statCapList.list = stat_capability_list.data();
+
+    sai_status_t status = m_sai->queryStatsStCapability(switchOid, objectType, &statCapList);
+
+    std::vector<swss::FieldValueTuple> entry;
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        std::vector<std::string> vec_stat_enum;
+        std::vector<std::string> vec_stat_modes;
+        std::vector<std::string> vec_minimal_polling_intervals;
+
+        for (uint32_t it = 0; it < statCapList.count; it++)
+        {
+            vec_stat_enum.push_back(std::to_string(statCapList.list[it].capability.stat_enum));
+            vec_stat_modes.push_back(std::to_string(statCapList.list[it].capability.stat_modes));
+            vec_minimal_polling_intervals.push_back(std::to_string(statCapList.list[it].minimal_polling_interval));
+        }
+
+        std::ostringstream join_stat_enum;
+        std::copy(vec_stat_enum.begin(), vec_stat_enum.end(), std::ostream_iterator<std::string>(join_stat_enum, ","));
+        auto strCapEnum = join_stat_enum.str();
+
+        std::ostringstream join_stat_modes;
+        std::copy(vec_stat_modes.begin(), vec_stat_modes.end(), std::ostream_iterator<std::string>(join_stat_modes, ","));
+        auto strCapModes = join_stat_modes.str();
+
+        std::ostringstream join_minimal_polling_intervals;
+        std::copy(vec_minimal_polling_intervals.begin(), vec_minimal_polling_intervals.end(), std::ostream_iterator<std::string>(join_minimal_polling_intervals, ","));
+        auto strCapMinPollInt = join_minimal_polling_intervals.str();
+
+        entry =
+            {
+                swss::FieldValueTuple("STAT_ENUM", strCapEnum),
+                swss::FieldValueTuple("STAT_MODES", strCapModes),
+                swss::FieldValueTuple("MINIMAL_POLLING_INTERVALS", strCapMinPollInt),
+                swss::FieldValueTuple("STAT_COUNT", std::to_string(statCapList.count))};
+
+        SWSS_LOG_DEBUG("Sending response: stat_enums = '%s', stat_modes = '%s', minimal_polling_intervals = '%s' count = %d",
+                       strCapEnum.c_str(), strCapModes.c_str(), strCapMinPollInt.c_str(), statCapList.count);
+    }
+    else if (status == SAI_STATUS_BUFFER_OVERFLOW)
+    {
+        entry = {swss::FieldValueTuple("STAT_COUNT", std::to_string(statCapList.count))};
+
+        SWSS_LOG_DEBUG("Sending response: count = %u", statCapList.count);
+    }
+
+    m_selectableChannel->set(sai_serialize_status(status), entry, REDIS_ASIC_STATE_COMMAND_STATS_ST_CAPABILITY_RESPONSE);
 
     return status;
 }

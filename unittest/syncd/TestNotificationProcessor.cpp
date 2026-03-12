@@ -9,6 +9,11 @@
 
 using namespace syncd;
 
+static std::string natData =
+"[{\"nat_entry\":\"{\\\"nat_data\\\":{\\\"key\\\":{\\\"dst_ip\\\":\\\"10.10.10.10\\\",\\\"l4_dst_port\\\":\\\"20006\\\",\\\"l4_src_port\\\":\\\"0\\\",\\\"proto\\\":\\\"6\\\",\\\"src_ip\\\":\\\"0.0.0.0\\\"},\\\"mask\\\":{\\\"dst_ip\\\":\\\"255.255.255.255\\\",\\\"l4_dst_port\\\":\\\"65535\\\",\\\"l4_src_port\\\":\\\"0\\\",\\\"proto\\\":\\\"255\\\",\\\"src_ip\\\":\\\"0.0.0.0\\\"}},\\\"nat_type\\\":\\\"SAI_NAT_TYPE_DESTINATION_NAT\\\",\\\"switch_id\\\":\\\"oid:0x21000000000000\\\",\\\"vr\\\":\\\"oid:0x3000000000048\\\"}\",\"nat_event\":\"SAI_NAT_EVENT_AGED\"}]";
+
+static std::string icmp_echo_session_ntf_str = "[{\"icmp_echo_session_id\":\"oid:0x100000000003a\",\"session_state\":\"SAI_ICMP_ECHO_SESSION_STATE_DOWN\"}]";
+
 TEST(NotificationProcessor, NotificationProcessorTest)
 {
     auto sai = std::make_shared<saivs::Sai>();
@@ -33,6 +38,20 @@ TEST(NotificationProcessor, NotificationProcessorTest)
     EXPECT_NE(translator, nullptr);
     notificationProcessor->m_translator = translator;
 
+    // Check NAT notification without RIDs
+    std::vector<swss::FieldValueTuple> natEntry;
+    swss::KeyOpFieldsValuesTuple natFV(SAI_SWITCH_NOTIFICATION_NAME_NAT_EVENT, natData, natEntry);
+    notificationProcessor->syncProcessNotification(natFV);
+
+    // Check NAT notification with RIDs present
+    translator->insertRidAndVid(0x21000000000000,0x210000000000);
+    translator->insertRidAndVid(0x3000000000048,0x30000000048);
+
+    notificationProcessor->syncProcessNotification(natFV);
+
+    translator->eraseRidAndVid(0x21000000000000,0x210000000000);
+    translator->eraseRidAndVid(0x3000000000048,0x30000000048);
+
     // Test FDB MOVE event
     std::string key = "ASIC_STATE:SAI_OBJECT_TYPE_FDB_ENTRY:{\"bvid\":\"oid:0x26000000000001\",\"mac\":\"00:00:00:00:00:01\",\"switch_id\":\"oid:0x210000000000\"}";
     dbAsic->hset(key, "SAI_FDB_ENTRY_ATTR_BRIDGE_PORT_ID", "oid:0x3a000000000a98");
@@ -56,4 +75,31 @@ TEST(NotificationProcessor, NotificationProcessorTest)
     EXPECT_NE(bridgeport, nullptr);
     EXPECT_EQ(*bridgeport, "oid:0x3a000000000a99");
     EXPECT_EQ(ip, nullptr);
+
+    //Test ICMP_ECHO_SESSION_STATE_CHANGE Notification
+    translator->insertRidAndVid(0x21000000000000,0x210000000000);
+    translator->insertRidAndVid(0x100000000003a,0x100000000003a);
+    std::vector<swss::FieldValueTuple> icmp_echo_session_ntf_entry;
+    swss::KeyOpFieldsValuesTuple icmp_obj(SAI_SWITCH_NOTIFICATION_NAME_ICMP_ECHO_SESSION_STATE_CHANGE, icmp_echo_session_ntf_str, icmp_echo_session_ntf_entry);
+    notificationProcessor->syncProcessNotification(icmp_obj);
+    translator->eraseRidAndVid(0x21000000000000,0x210000000000);
+    translator->insertRidAndVid(0x100000000003a,0x100000000003a);
+
+    // Test ASIC/SDK health event
+    std::string asheString = "{"
+        "\"category\":\"SAI_SWITCH_ASIC_SDK_HEALTH_CATEGORY_FW\","
+        "\"data.data_type\":\"SAI_HEALTH_DATA_TYPE_GENERAL\","
+        "\"description\":\"2:30,30\","
+        "\"severity\":\"SAI_SWITCH_ASIC_SDK_HEALTH_SEVERITY_FATAL\","
+        "\"switch_id\":\"oid:0x21000000000000\","
+        "\"timestamp\":\"{"
+            "\\\"tv_nsec\\\":\\\"28715881\\\","
+            "\\\"tv_sec\\\":\\\"1700042919\\\""
+        "}\""
+    "}";
+    std::vector<swss::FieldValueTuple> asheEntry;
+    swss::KeyOpFieldsValuesTuple asheItem(SAI_SWITCH_NOTIFICATION_NAME_SWITCH_ASIC_SDK_HEALTH_EVENT, asheString, asheEntry);
+    translator->insertRidAndVid(0x21000000000000,0x210000000000);
+    notificationProcessor->syncProcessNotification(asheItem);
+    translator->eraseRidAndVid(0x21000000000000,0x210000000000);
 }

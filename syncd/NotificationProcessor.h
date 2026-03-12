@@ -58,6 +58,9 @@ namespace syncd
             bool check_fdb_event_notification_data(
                     _In_ const sai_fdb_event_notification_data_t& data);
 
+            bool check_nat_event_notification_data(
+                    _In_ const sai_nat_event_notification_data_t& data);
+
             bool contains_fdb_flush_event(
                     _In_ uint32_t count,
                     _In_ const sai_fdb_event_notification_data_t *data);
@@ -73,6 +76,10 @@ namespace syncd
                     _In_ uint32_t count,
                     _In_ sai_fdb_event_notification_data_t *data);
 
+            void process_on_nat_event(
+                    _In_ uint32_t count,
+                    _In_ sai_nat_event_notification_data_t *data);
+
             void process_on_queue_deadlock_event(
                     _In_ uint32_t count,
                     _In_ sai_queue_deadlock_notification_data_t *data);
@@ -85,8 +92,37 @@ namespace syncd
                     _In_ uint32_t count,
                     _In_ sai_bfd_session_state_notification_t *data);
 
+            void process_on_icmp_echo_session_state_change(
+                    _In_ uint32_t count,
+                    _In_ sai_icmp_echo_session_state_notification_t *data);
+
+            void process_on_ha_set_event(
+                    _In_ uint32_t count,
+                    _In_ sai_ha_set_event_data_t *data);
+
+            void process_on_ha_scope_event(
+                    _In_ uint32_t count,
+                    _In_ sai_ha_scope_event_data_t *data);
+
+            void process_on_port_host_tx_ready_change(
+                    _In_ sai_object_id_t switch_id,
+                    _In_ sai_object_id_t port_id,
+                    _In_ sai_port_host_tx_ready_status_t *host_tx_ready_status);
+
+            void process_on_switch_asic_sdk_health_event(
+                    _In_ sai_object_id_t switch_id,
+                    _In_ sai_switch_asic_sdk_health_severity_t severity,
+                    _In_ sai_timespec_t timestamp,
+                    _In_ sai_switch_asic_sdk_health_category_t category,
+                    _In_ sai_switch_health_data_t data,
+                    _In_ const sai_u8_list_t description);
+
             void process_on_switch_shutdown_request(
                     _In_ sai_object_id_t switch_rid);
+
+            void process_on_twamp_session_event(
+                    _In_ uint32_t count,
+                    _In_ sai_twamp_session_event_notification_data_t *data);
 
         private: // handlers
 
@@ -94,6 +130,9 @@ namespace syncd
                     _In_ const std::string &data);
 
             void handle_fdb_event(
+                    _In_ const std::string &data);
+
+            void handle_nat_event(
                     _In_ const std::string &data);
 
             void handle_queue_deadlock(
@@ -105,7 +144,28 @@ namespace syncd
             void handle_bfd_session_state_change(
                     _In_ const std::string &data);
 
+            void handle_icmp_echo_session_state_change(
+                    _In_ const std::string &data);
+
+            void handle_ha_set_event(
+                    _In_ const std::string &data);
+
+            void handle_ha_scope_event(
+                    _In_ const std::string &data);
+
+            void handle_switch_asic_sdk_health_event(
+                    _In_ const std::string &data);
+
             void handle_switch_shutdown_request(
+                    _In_ const std::string &data);
+
+            void handle_port_host_tx_ready_change(
+                    _In_ const std::string &data);
+
+            void handle_twamp_session_event(
+                    _In_ const std::string &data);
+
+            void handle_tam_tel_type_config_change(
                     _In_ const std::string &data);
 
             void processNotification(

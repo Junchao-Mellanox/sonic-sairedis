@@ -20,6 +20,7 @@ extern "C" {
 #include "meta/OidRefCounter.h"
 #include "meta/SaiAttrWrapper.h"
 #include "meta/SaiObjectCollection.h"
+#include "meta/RedisSelectableChannel.h"
 
 #include "swss/logger.h"
 #include "swss/dbconnector.h"
@@ -63,6 +64,7 @@ namespace swss {
 }
 
 static std::shared_ptr<swss::DBConnector> g_db1;
+static std::shared_ptr<Syncd> g_syncd_obj;
 
 static sai_next_hop_group_api_t test_next_hop_group_api;
 static std::vector<std::tuple<sai_object_id_t, sai_object_id_t, std::vector<sai_attribute_t>>> created_next_hop_group_member;
@@ -373,6 +375,113 @@ void test_bulk_next_hop_group_member_create()
     ASSERT_SUCCESS("Failed to bulk remove nhgm");
 }
 
+void test_bulk_next_hop_create()
+{
+    SWSS_LOG_ENTER();
+
+
+    sai_reinit();
+
+    sai_status_t    status;
+
+    sai_next_hop_api_t  *sai_next_hop_api = NULL;
+    sai_switch_api_t *sai_switch_api = NULL;
+    sai_lag_api_t *sai_lag_api = NULL;
+    sai_router_interface_api_t *sai_rif_api = NULL;
+    sai_virtual_router_api_t * sai_virtual_router_api = NULL;
+
+    sai_api_query(SAI_API_NEXT_HOP, (void**)&sai_next_hop_api);
+    sai_api_query(SAI_API_SWITCH, (void**)&sai_switch_api);
+    sai_api_query(SAI_API_ROUTER_INTERFACE, (void **)&sai_rif_api);
+    sai_api_query(SAI_API_LAG, (void**)&sai_lag_api);
+    sai_api_query(SAI_API_VIRTUAL_ROUTER, (void**)&sai_virtual_router_api);
+
+    uint32_t count = 3;
+
+    std::vector<sai_attribute_t> attrs;
+
+    sai_attribute_t swattr;
+
+    swattr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    swattr.value.booldata = true;
+
+    sai_object_id_t switch_id;
+    status = sai_switch_api->create_switch(&switch_id, 1, &swattr);
+
+    ASSERT_SUCCESS("Failed to create switch");
+
+    // virtual router
+    sai_object_id_t vr;
+
+    status = sai_virtual_router_api->create_virtual_router(&vr, switch_id, 0, NULL);
+
+    ASSERT_SUCCESS("failed to create virtual router");
+
+    // create lag
+    sai_object_id_t lag;
+    status = sai_lag_api->create_lag(&lag, switch_id, 0, NULL);
+
+    // create router interface
+    sai_object_id_t rif;
+    sai_attribute_t rifattr[3];
+    rifattr[0].id = SAI_ROUTER_INTERFACE_ATTR_VIRTUAL_ROUTER_ID;
+    rifattr[0].value.oid = vr;
+    rifattr[1].id = SAI_ROUTER_INTERFACE_ATTR_TYPE;
+    rifattr[1].value.s32 = SAI_ROUTER_INTERFACE_TYPE_PORT;
+    rifattr[2].id = SAI_ROUTER_INTERFACE_ATTR_PORT_ID;
+    rifattr[2].value.oid = lag;
+    status = sai_rif_api->create_router_interface(&rif, switch_id, 3, rifattr);
+    ASSERT_SUCCESS("Failed to create router interface");
+
+    std::vector<std::vector<sai_attribute_t>> nh_attrs;
+    std::vector<const sai_attribute_t *> nh_attrs_array;
+    std::vector<uint32_t> nh_attrs_count;
+    for (uint32_t i = 0; i <  count; ++i)
+    {
+        std::vector<sai_attribute_t> list(3);
+        sai_attribute_t &nhattr0 = list[0];
+        sai_attribute_t &nhattr1 = list[1];
+        sai_attribute_t &nhattr2 = list[2];
+
+        nhattr0.id = SAI_NEXT_HOP_ATTR_TYPE;
+        nhattr0.value.s32 = SAI_NEXT_HOP_TYPE_IP;
+        nhattr1.id = SAI_NEXT_HOP_ATTR_IP;
+        nhattr1.value.ipaddr.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
+        nhattr1.value.ipaddr.addr.ip4 = 0x10000001;
+        nhattr2.id = SAI_NEXT_HOP_ATTR_ROUTER_INTERFACE_ID;
+        nhattr2.value.oid = rif;
+
+        nh_attrs.push_back(list);
+        nh_attrs_count.push_back(3);
+    }
+
+    for (size_t j = 0; j < nh_attrs.size(); j++)
+    {
+        nh_attrs_array.push_back(nh_attrs[j].data());
+    }
+
+    std::vector<sai_status_t> statuses(count);
+    std::vector<sai_object_id_t> object_id(count);
+    sai_next_hop_api->create_next_hops(switch_id, count, nh_attrs_count.data(), nh_attrs_array.data(), SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, object_id.data(), statuses.data());
+    ASSERT_SUCCESS("Failed to bulk create nh");
+
+    for (size_t j = 0; j < statuses.size(); j++)
+    {
+        status = statuses[j];
+        ASSERT_SUCCESS("Failed to create nh # %zu", j);
+    }
+
+    statuses.clear();
+
+    status = sai_next_hop_api->remove_next_hops(count, object_id.data(), SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, statuses.data());
+    ASSERT_SUCCESS("Failed to bulk remove nh");
+    for (size_t j = 0; j < statuses.size(); j++)
+    {
+        status = statuses[j];
+        ASSERT_SUCCESS("Failed to remove nh # %zu", j);
+    }
+}
+
 void test_bulk_fdb_create()
 {
     SWSS_LOG_ENTER();
@@ -671,6 +780,145 @@ void test_bulk_route_set()
     ASSERT_SUCCESS("Failed to bulk remove route entry");
 }
 
+void test_bulk_neighbor_set()
+{
+    SWSS_LOG_ENTER();
+
+
+    sai_reinit();
+
+
+    sai_status_t    status;
+
+    sai_neighbor_api_t  *sai_neighbor_api = NULL;
+    sai_switch_api_t *sai_switch_api = NULL;
+    sai_virtual_router_api_t * sai_virtual_router_api = NULL;
+    sai_lag_api_t *sai_lag_api = NULL;
+    sai_router_interface_api_t *sai_rif_api = NULL;
+
+    sai_api_query(SAI_API_NEIGHBOR, (void**)&sai_neighbor_api);
+    sai_api_query(SAI_API_SWITCH, (void**)&sai_switch_api);
+    sai_api_query(SAI_API_VIRTUAL_ROUTER, (void**)&sai_virtual_router_api);
+    sai_api_query(SAI_API_ROUTER_INTERFACE, (void **)&sai_rif_api);
+    sai_api_query(SAI_API_LAG, (void**)&sai_lag_api);
+
+    uint32_t count = 3;
+
+    std::vector<sai_neighbor_entry_t> neighbors;
+    std::vector<sai_attribute_t> attrs;
+
+    sai_attribute_t swattr;
+
+    swattr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    swattr.value.booldata = true;
+
+    sai_object_id_t switch_id;
+    status = sai_switch_api->create_switch(&switch_id, 1, &swattr);
+
+    ASSERT_SUCCESS("Failed to create switch");
+
+    std::vector<std::vector<sai_attribute_t>> neighbor_attrs;
+    std::vector<const sai_attribute_t *> neighbor_attrs_array;
+    std::vector<uint32_t> neighbor_attrs_count;
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        sai_neighbor_entry_t neighbor_entry;
+
+        // virtual router
+        sai_object_id_t vr;
+
+        status = sai_virtual_router_api->create_virtual_router(&vr, switch_id, 0, NULL);
+
+        ASSERT_SUCCESS("failed to create virtual router");
+
+        // create lag
+        sai_object_id_t lag;
+        status = sai_lag_api->create_lag(&lag, switch_id, 0, NULL);
+
+        // create router interface
+        sai_object_id_t rif;
+        sai_attribute_t rifattr[3];
+        rifattr[0].id = SAI_ROUTER_INTERFACE_ATTR_VIRTUAL_ROUTER_ID;
+        rifattr[0].value.oid = vr;
+        rifattr[1].id = SAI_ROUTER_INTERFACE_ATTR_TYPE;
+        rifattr[1].value.s32 = SAI_ROUTER_INTERFACE_TYPE_PORT;
+        rifattr[2].id = SAI_ROUTER_INTERFACE_ATTR_PORT_ID;
+        rifattr[2].value.oid = lag;
+        status = sai_rif_api->create_router_interface(&rif, switch_id, 3, rifattr);
+        ASSERT_SUCCESS("Failed to create router interface");
+
+        neighbor_entry.ip_address.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
+        neighbor_entry.ip_address.addr.ip4 = 0x10000001 + i;
+        neighbor_entry.rif_id = rif;
+        neighbor_entry.switch_id = switch_id;
+        neighbors.push_back(neighbor_entry);
+
+        std::vector<sai_attribute_t> list(1);
+        sai_attribute_t &attr = list[0];
+
+        sai_mac_t mac = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+        attr.id = SAI_NEIGHBOR_ENTRY_ATTR_DST_MAC_ADDRESS;
+        memcpy(attr.value.mac, mac, 6);
+        neighbor_attrs.push_back(list);
+        neighbor_attrs_count.push_back(1);
+    }
+
+    for (size_t j = 0; j < neighbor_attrs.size(); j++)
+    {
+        neighbor_attrs_array.push_back(neighbor_attrs[j].data());
+    }
+
+    std::vector<sai_status_t> statuses(count);
+    status = sai_neighbor_api->create_neighbor_entries(count, neighbors.data(), neighbor_attrs_count.data(), neighbor_attrs_array.data(), SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, statuses.data());
+    ASSERT_SUCCESS("Failed to create neighbor");
+    for (size_t j = 0; j < statuses.size(); j++)
+    {
+        status = statuses[j];
+        ASSERT_SUCCESS("Failed to create neighbor # %zu", j);
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        sai_attribute_t attr;
+        attr.id = SAI_NEIGHBOR_ENTRY_ATTR_PACKET_ACTION;
+        attr.value.s32 = SAI_PACKET_ACTION_FORWARD;
+
+        status = sai_neighbor_api->set_neighbor_entry_attribute(&neighbors[i], &attr);
+
+        attrs.push_back(attr);
+
+        ASSERT_SUCCESS("Failed to set neighbor");
+    }
+
+    statuses.clear();
+    statuses.resize(attrs.size());
+
+    for (auto &attr: attrs)
+    {
+        attr.value.s32 = SAI_PACKET_ACTION_FORWARD;
+    }
+
+    status = sai_neighbor_api->set_neighbor_entries_attribute(
+        count,
+        neighbors.data(),
+        attrs.data(),
+        SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR,
+        statuses.data());
+
+    ASSERT_SUCCESS("Failed to bulk set neighbor");
+
+    for (auto s: statuses)
+    {
+        status = s;
+
+        ASSERT_SUCCESS("Failed to bulk set neighbor on one of the neighbors");
+    }
+
+    status = sai_neighbor_api->remove_neighbor_entries(count, neighbors.data(), SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, statuses.data());
+    ASSERT_SUCCESS("Failed to bulk remove neighbor entry");
+}
+
 void syncdThread()
 {
     SWSS_LOG_ENTER();
@@ -683,12 +931,14 @@ void syncdThread()
 
     auto commandLineOptions = std::make_shared<CommandLineOptions>();
 
-    commandLineOptions->m_enableTempView = true;
+    commandLineOptions->m_enableTempView = false;
     commandLineOptions->m_enableUnittests = false;
     commandLineOptions->m_disableExitSleep = true;
     commandLineOptions->m_profileMapFile = "testprofile.ini";
 
     auto syncd = std::make_shared<Syncd>(vendorSai, commandLineOptions, isWarmStart);
+
+    g_syncd_obj = syncd;
 
     SWSS_LOG_WARN("starting run");
     syncd->run();
@@ -699,6 +949,7 @@ void test_invoke_dump()
     SWSS_LOG_ENTER();
     clearDB();
 
+    swss::Logger::getInstance().setMinPrio(swss::Logger::SWSS_DEBUG);
     auto syncd = std::make_shared<std::thread>(syncdThread);
     syncd->detach();
 
@@ -708,7 +959,7 @@ void test_invoke_dump()
 
     auto sairedis = std::make_shared<sairedis::Sai>();
 
-    sai_status_t status = sairedis->initialize(0, &test_services);
+    sai_status_t status = sairedis->apiInitialize(0, &test_services);
 
     CHECK_STATUS(status);
 
@@ -716,156 +967,16 @@ void test_invoke_dump()
 
     ASSERT_SUCCESS("Failed to invoke dump");
     assert(mockCallArg == SAI_FAILURE_DUMP_SCRIPT);
-}
 
-
-void test_bulk_route_create()
-{
-    SWSS_LOG_ENTER();
-
-    clearDB();
-
-    auto syncd = std::make_shared<std::thread>(syncdThread);
-
-    sleep(2);
-
-    auto sairedis = std::make_shared<sairedis::Sai>();
-
-    sai_status_t status = sairedis->initialize(0, &test_services);
-
-    CHECK_STATUS(status);
-
-    sai_object_id_t switchId;
-
-    sai_attribute_t attrs[1];
-
-    // enable recording
-
-    attrs[0].id = SAI_REDIS_SWITCH_ATTR_RECORD;
-    attrs[0].value.booldata = true;
-
-    status = sairedis->set(SAI_OBJECT_TYPE_SWITCH, SAI_NULL_OBJECT_ID, attrs);
-    CHECK_STATUS(status);
-
-    // init view
-
-    attrs[0].id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
-    attrs[0].value.s32 = SAI_REDIS_NOTIFY_SYNCD_INIT_VIEW;
-
-    status = sairedis->set(SAI_OBJECT_TYPE_SWITCH, SAI_NULL_OBJECT_ID, attrs);
-    CHECK_STATUS(status);
-
-    // apply view
-
-    attrs[0].id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
-    attrs[0].value.s32 = SAI_REDIS_NOTIFY_SYNCD_APPLY_VIEW;
-
-    status = sairedis->set(SAI_OBJECT_TYPE_SWITCH, SAI_NULL_OBJECT_ID, attrs);
-    CHECK_STATUS(status);
-
-    // init view
-
-    attrs[0].id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
-    attrs[0].value.s32 = SAI_REDIS_NOTIFY_SYNCD_INIT_VIEW;
-
-    status = sairedis->set(SAI_OBJECT_TYPE_SWITCH, SAI_NULL_OBJECT_ID, attrs);
-    CHECK_STATUS(status);
-
-    // create switch
-
-    attrs[0].id = SAI_SWITCH_ATTR_INIT_SWITCH;
-    attrs[0].value.booldata = true;
-
-    status = sairedis->create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, attrs);
-    CHECK_STATUS(status);
-
-    attrs[0].id = SAI_SWITCH_ATTR_DEFAULT_VIRTUAL_ROUTER_ID;
-    status = sairedis->get(SAI_OBJECT_TYPE_SWITCH, switchId, 1, attrs);
-    CHECK_STATUS(status);
-
-    sai_object_id_t vr = attrs[0].value.oid;
-
-    // create routes bulk routes in init view mode
-
-    std::vector<std::vector<sai_attribute_t>> route_attrs;
-    std::vector<const sai_attribute_t *> route_attrs_array;
-    std::vector<uint32_t> route_attrs_count;
-    std::vector<sai_route_entry_t> routes;
-    //std::vector<sai_attribute_t> attrs;
-
-    uint32_t count = 3;
-
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        sai_route_entry_t route_entry;
-
-        route_entry.destination.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
-        route_entry.destination.addr.ip4 = htonl(0x0a000000 | i);
-        route_entry.destination.mask.ip4 = htonl(0xffffffff);
-        route_entry.vr_id = vr;
-        route_entry.switch_id = switchId;
-        route_entry.destination.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
-
-        routes.push_back(route_entry);
-
-        std::vector<sai_attribute_t> list; // no attributes
-
-        route_attrs.push_back(list);
-        route_attrs_count.push_back(0);
-    }
-
-    for (size_t j = 0; j < route_attrs.size(); j++)
-    {
-        route_attrs_array.push_back(route_attrs[j].data());
-    }
-
-    std::vector<sai_status_t> statuses(count);
-
-    status = sairedis->bulkCreate(
-            count,
-            routes.data(),
-            route_attrs_count.data(),
-            route_attrs_array.data(),
-            SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR,
-            statuses.data());
-
-    CHECK_STATUS(status);
-
-    // create single route in init view
-
-    sai_route_entry_t route;
-    route.destination.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
-    route.destination.addr.ip4 = htonl(0x0b000000);
-    route.destination.mask.ip4 = htonl(0xffffffff);
-    route.vr_id = vr;
-    route.switch_id = switchId;
-    route.destination.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
-
-    status = sairedis->create(&route, 0, nullptr);
-    CHECK_STATUS(status);
-
-    // apply view
-
-    attrs[0].id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
-    attrs[0].value.s32 = SAI_REDIS_NOTIFY_SYNCD_APPLY_VIEW;
-
-    status = sairedis->set(SAI_OBJECT_TYPE_SWITCH, SAI_NULL_OBJECT_ID, attrs);
-    CHECK_STATUS(status);
-
-    SWSS_LOG_ERROR("sleep");
-
-    sleep(10000);
+    attr.id = SAI_REDIS_SWITCH_ATTR_NOTIFY_SYNCD;
+    attr.value.s32 = SAI_REDIS_NOTIFY_SYNCD_INIT_VIEW;
+    status = sairedis->set(SAI_OBJECT_TYPE_SWITCH, SAI_NULL_OBJECT_ID, &attr);
+    ASSERT_SUCCESS("Notify syncd failed");
 }
 
 void test_watchdog_timer_clock_rollback()
 {
     SWSS_LOG_ENTER();
-
-    if (getuid() != 0)
-    {
-        SWSS_LOG_WARN("this test requires root for set time");
-        return;
-    }
 
     const int64_t WARN_TIMESPAN_USEC = 30 * 1000000;
     const uint8_t ROLLBACK_TIME_SEC = 5;
@@ -889,6 +1000,39 @@ void test_watchdog_timer_clock_rollback()
     twd.setEndTime();
 }
 
+void test_query_stats_capability_query()
+{
+    SWSS_LOG_ENTER();
+
+    MetadataLogger::initialize();
+
+    sai_object_id_t switch_id = 0x21000000000000;
+
+    auto switchIdStr = sai_serialize_object_id(switch_id);
+
+    auto objectTypeStr = sai_serialize_object_type(SAI_OBJECT_TYPE_QUEUE);
+    const std::string list_size = std::to_string(1);
+    const std::string op = "stats_capability_query";
+
+    const std::vector<swss::FieldValueTuple> entry =
+    {
+        swss::FieldValueTuple("OBJECT_TYPE", objectTypeStr),
+        swss::FieldValueTuple("LIST_SIZE", list_size)
+    };
+
+    auto consumer = sairedis::RedisSelectableChannel(
+                g_db1,
+                ASIC_STATE_TABLE,
+                REDIS_TABLE_GETRESPONSE,
+                TEMP_PREFIX,
+                false);
+
+    consumer.set(switchIdStr, entry, op);
+
+    sleep(1);
+    g_syncd_obj->processEvent(consumer);
+}
+
 int main()
 {
     swss::Logger::getInstance().setMinPrio(swss::Logger::SWSS_DEBUG);
@@ -907,17 +1051,24 @@ int main()
 
         test_bulk_next_hop_group_member_create();
 
+        test_bulk_next_hop_create();
+
         test_bulk_fdb_create();
+
+        test_bulk_neighbor_set();
 
         test_bulk_route_set();
 
         sai_api_uninitialize();
 
-        printf("\n[ %s ]\n\n", sai_serialize_status(SAI_STATUS_SUCCESS).c_str());
-
-        test_watchdog_timer_clock_rollback();
+        //test_watchdog_timer_clock_rollback();
 
         test_invoke_dump();
+
+        test_query_stats_capability_query();
+
+        printf("\n[ %s ]\n\n", sai_serialize_status(SAI_STATUS_SUCCESS).c_str());
+
     }
     catch (const std::exception &e)
     {

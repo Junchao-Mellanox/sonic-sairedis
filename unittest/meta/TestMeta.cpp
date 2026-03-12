@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <boost/algorithm/string/join.hpp>
+
 #include <memory>
 
 #define VLAN_ID 2
@@ -450,14 +452,14 @@ TEST(Meta, initialize)
 {
     Meta m(std::make_shared<DummySaiInterface>());
 
-    EXPECT_EQ(SAI_STATUS_SUCCESS, m.initialize(0, 0));
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.apiInitialize(0, 0));
 }
 
 TEST(Meta, uninitialize)
 {
     Meta m(std::make_shared<DummySaiInterface>());
 
-    EXPECT_EQ(SAI_STATUS_SUCCESS, m.uninitialize());
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.apiUninitialize());
 }
 
 TEST(Meta, quad_mcast_fdb_entry)
@@ -898,7 +900,7 @@ TEST(Meta, queryAttributeCapability)
     EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeCapability(switchId, SAI_OBJECT_TYPE_ACL_ENTRY, 100000, &cap));
 }
 
-TEST(Meta, queryAattributeEnumValuesCapability)
+TEST(Meta, queryAttributeEnumValuesCapability)
 {
     Meta m(std::make_shared<MetaTestSaiInterface>());
 
@@ -921,21 +923,80 @@ TEST(Meta, queryAattributeEnumValuesCapability)
     vals[0] = 0;
     vals[1] = 100000;
 
-    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
 
     // set count without list;
 
     list.list = nullptr;
 
-    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_SWITCHING_MODE, &list));
 
     // non enum attribute
 
-    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_BCAST_CPU_FLOOD_ENABLE, &list));
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, SAI_SWITCH_ATTR_BCAST_CPU_FLOOD_ENABLE, &list));
 
     // invalid attribute
 
-    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAattributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, 10000, &list));
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryAttributeEnumValuesCapability(switchId, SAI_OBJECT_TYPE_SWITCH, 10000, &list));
+}
+
+TEST(Meta, queryStatsCapability)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    sai_stat_capability_list_t queue_stats_capability;
+    sai_stat_capability_t stat_initializer;
+    stat_initializer.stat_enum = 0;
+    stat_initializer.stat_modes = 0;
+    std::vector<sai_stat_capability_t> qstat_cap_list(20, stat_initializer);
+    queue_stats_capability.count = 15;
+    queue_stats_capability.list = qstat_cap_list.data();
+
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryStatsCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
+
+    queue_stats_capability.list = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryStatsCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
+
+}
+
+TEST(Meta, queryStatsStCapability)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    sai_stat_st_capability_list_t queue_stats_capability;
+    sai_stat_st_capability_t stat_initializer;
+    stat_initializer.capability.stat_enum = 0;
+    stat_initializer.capability.stat_modes = 0;
+    stat_initializer.minimal_polling_interval = 0;
+    std::vector<sai_stat_st_capability_t> qstat_cap_list(20, stat_initializer);
+    queue_stats_capability.count = 15;
+    queue_stats_capability.list = qstat_cap_list.data();
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.queryStatsStCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
+
+    queue_stats_capability.list = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.queryStatsStCapability(switchId, SAI_OBJECT_TYPE_QUEUE, &queue_stats_capability));
 }
 
 TEST(Meta, meta_validate_stats)
@@ -990,6 +1051,46 @@ TEST(Meta, meta_validate_stats)
 
     EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, m.call_meta_validate_stats(SAI_OBJECT_TYPE_VIRTUAL_ROUTER, vrId, 2, counter_ids, counters, SAI_STATS_MODE_READ));
 }
+
+TEST(Meta, quad_generic_programmable_entry)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    std::string table_name = "test_table";
+    std::string json_value = "test_json";
+
+    sai_attribute_t attrs[2];
+    attrs[0].id = SAI_GENERIC_PROGRAMMABLE_ATTR_OBJECT_NAME;
+    attrs[0].value.s8list.count = (uint32_t)table_name.size();
+    attrs[0].value.s8list.list = (int8_t *)const_cast<char *>(table_name.c_str());
+
+    attrs[1].id = SAI_GENERIC_PROGRAMMABLE_ATTR_ENTRY;
+    attrs[1].value.s8list.count = (uint32_t)json_value.size();
+    attrs[1].value.s8list.list = (int8_t *)const_cast<char *>(json_value.c_str());
+
+    sai_object_id_t objId = 0;
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_GENERIC_PROGRAMMABLE, &objId, switchId, 2, attrs));
+
+    attr.id = SAI_GENERIC_PROGRAMMABLE_ATTR_ENTRY;
+    attr.value.s8list.count = (uint32_t)json_value.size();
+    attr.value.s8list.list = (int8_t *)const_cast<char *>(json_value.c_str());
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.set(SAI_OBJECT_TYPE_GENERIC_PROGRAMMABLE, objId, &attr));
+
+    attr.id = SAI_GENERIC_PROGRAMMABLE_ATTR_ENTRY;
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.get(SAI_OBJECT_TYPE_GENERIC_PROGRAMMABLE, objId, 1, &attr));
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.remove(SAI_OBJECT_TYPE_GENERIC_PROGRAMMABLE, objId));
+}
+
 
 TEST(Meta, quad_my_sid_entry)
 {
@@ -1114,6 +1215,149 @@ TEST(Meta, quad_bulk_route_entry)
     // remove
 
     EXPECT_EQ(SAI_STATUS_SUCCESS, m.bulkRemove(2, e, SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, statuses));
+}
+
+sai_object_id_t create_port(
+        _In_ Meta &m,
+        _In_ sai_object_id_t switch_id)
+{
+    SWSS_LOG_ENTER();
+    sai_object_id_t port;
+
+    static uint32_t id = 1;
+    id++;
+    sai_attribute_t attrs[9] = { };
+
+    uint32_t list[1] = { id };
+
+    attrs[0].id = SAI_PORT_ATTR_HW_LANE_LIST;
+    attrs[0].value.u32list.count = 1;
+    attrs[0].value.u32list.list = list;
+
+    attrs[1].id = SAI_PORT_ATTR_SPEED;
+    attrs[1].value.u32 = 10000;
+
+    auto status = m.create(SAI_OBJECT_TYPE_PORT, &port, switch_id, 2, attrs);
+    EXPECT_EQ(SAI_STATUS_SUCCESS, status);
+
+    return port;
+}
+
+sai_object_id_t create_rif(
+        _In_ Meta &m,
+        _In_ sai_object_id_t switch_id,
+        _In_ sai_object_id_t port_id,
+        _In_ sai_object_id_t vr_id)
+{
+    SWSS_LOG_ENTER();
+    sai_object_id_t rif;
+
+    sai_attribute_t attrs[9] = { };
+
+    attrs[0].id = SAI_ROUTER_INTERFACE_ATTR_VIRTUAL_ROUTER_ID;
+    attrs[0].value.oid = vr_id;
+
+    attrs[1].id = SAI_ROUTER_INTERFACE_ATTR_TYPE;
+    attrs[1].value.s32 = SAI_ROUTER_INTERFACE_TYPE_PORT;
+
+    attrs[2].id = SAI_ROUTER_INTERFACE_ATTR_PORT_ID;
+    attrs[2].value.oid = port_id;
+
+    auto status = m.create(SAI_OBJECT_TYPE_ROUTER_INTERFACE, &rif, switch_id, 3, attrs);
+    EXPECT_EQ(SAI_STATUS_SUCCESS, status);
+
+    return rif;
+}
+
+TEST(Meta, quad_bulk_neighbor_entry)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    sai_object_id_t vlanId = 0;
+
+    attr.id = SAI_VLAN_ATTR_VLAN_ID;
+    attr.value.u16 = 2;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_VLAN, &vlanId, switchId, 1, &attr));
+
+    sai_object_id_t vrId = 0;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_VIRTUAL_ROUTER, &vrId, switchId, 0, &attr));
+
+    sai_object_id_t portId = create_port(m, switchId);
+    sai_object_id_t rifId = create_rif(m, switchId, portId, vrId);
+
+    // create
+
+    sai_neighbor_entry_t e[2];
+
+    memset(e, 0, sizeof(e));
+
+    e[0].switch_id = switchId;
+    e[1].switch_id = switchId;
+
+    e[0].ip_address.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
+    e[0].ip_address.addr.ip4 = htonl(0x0a00000e);
+    e[1].ip_address.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
+    e[1].ip_address.addr.ip4 = htonl(0x0a00000f);
+
+    e[0].rif_id = rifId;
+    e[1].rif_id = rifId;
+
+    uint32_t attr_count[2];
+
+    attr_count[0] = 2;
+    attr_count[1] = 2;
+
+    sai_attribute_t list1[2];
+    sai_attribute_t list2[2];
+    sai_mac_t mac1 = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    sai_mac_t mac2 = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+
+    list1[0].id = SAI_NEIGHBOR_ENTRY_ATTR_DST_MAC_ADDRESS;
+    memcpy(list1[0].value.mac, mac1, 6);
+    list1[1].id = SAI_NEIGHBOR_ENTRY_ATTR_PACKET_ACTION;
+    list1[1].value.s32 = SAI_PACKET_ACTION_FORWARD;
+
+    list2[0].id = SAI_NEIGHBOR_ENTRY_ATTR_DST_MAC_ADDRESS;
+    memcpy(list2[0].value.mac, mac2, 6);
+    list2[1].id = SAI_NEIGHBOR_ENTRY_ATTR_PACKET_ACTION;
+    list2[1].value.s32 = SAI_PACKET_ACTION_FORWARD;
+
+    std::vector<const sai_attribute_t*> alist;
+
+    alist.push_back(list1);
+    alist.push_back(list2);
+
+    const sai_attribute_t **attr_list = alist.data();
+
+    sai_status_t statuses[2];
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.bulkCreate(2, e, attr_count, attr_list, SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, statuses));
+
+    // set
+    sai_attribute_t setlist[2];
+
+    setlist[0].id = SAI_NEIGHBOR_ENTRY_ATTR_PACKET_ACTION;
+    setlist[0].value.s32 = SAI_PACKET_ACTION_FORWARD;
+
+    setlist[1].id = SAI_NEIGHBOR_ENTRY_ATTR_PACKET_ACTION;
+    setlist[1].value.s32 = SAI_PACKET_ACTION_FORWARD;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.bulkSet(2, e, setlist, SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, statuses));
+
+    // remove
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.bulkRemove(2, e, SAI_BULK_OP_ERROR_MODE_IGNORE_ERROR, statuses));
+
 }
 
 TEST(Meta, quad_bulk_nat_entry)
@@ -1493,4 +1737,199 @@ TEST(Meta, populate)
     dump["SAI_OBJECT_TYPE_ACL_ENTRY:oid:0x8000000000635"]["SAI_ACL_ENTRY_ATTR_ACTION_REDIRECT_LIST"] = "2:oid:0x1000000000002,oid:0x1000000000003";
 
     m.populate(dump);
+}
+
+TEST(Meta, bulkGetClearStats)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+    EXPECT_EQ(SAI_STATUS_NOT_IMPLEMENTED, m.bulkGetStats(SAI_NULL_OBJECT_ID,
+                                                         SAI_OBJECT_TYPE_PORT,
+                                                         0,
+                                                         nullptr,
+                                                         0,
+                                                         nullptr,
+                                                         SAI_STATS_MODE_BULK_READ,
+                                                         nullptr,
+                                                         nullptr));
+    EXPECT_EQ(SAI_STATUS_NOT_IMPLEMENTED, m.bulkClearStats(SAI_NULL_OBJECT_ID,
+                                                           SAI_OBJECT_TYPE_PORT,
+                                                           0,
+                                                           nullptr,
+                                                           0,
+                                                           nullptr,
+                                                           SAI_STATS_MODE_BULK_CLEAR,
+                                                           nullptr));
+}
+
+TEST(Meta, quad_ars)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    sai_object_id_t ars;
+
+    std::vector<sai_attribute_t> attrs;
+
+    attr.id = SAI_ARS_ATTR_MODE;
+    attr.value.u32 = SAI_ARS_MODE_FLOWLET_QUALITY;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_IDLE_TIME;
+    attr.value.u32 = 100;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_MAX_FLOWS;
+    attr.value.u32 = 500;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_MON_ENABLE;
+    attr.value.booldata = true;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_SAMPLEPACKET_ENABLE;
+    attr.value.oid = SAI_NULL_OBJECT_ID;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_MAX_ALT_MEMEBERS_PER_GROUP;
+    attr.value.u32 = 15;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_MAX_PRIMARY_MEMEBERS_PER_GROUP;
+    attr.value.u32 = 14;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_PRIMARY_PATH_QUALITY_THRESHOLD;
+    attr.value.u32 = 14;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_ALTERNATE_PATH_COST;
+    attr.value.u32 = 1;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_ATTR_ALTERNATE_PATH_BIAS;
+    attr.value.u32 = 1;
+    attrs.push_back(attr);
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_ARS, &ars, switchId, (uint32_t)attrs.size(), attrs.data()));
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.get(SAI_OBJECT_TYPE_ARS, ars, (uint32_t)attrs.size(), attrs.data()));
+
+    attr.id = SAI_ARS_ATTR_ALTERNATE_PATH_BIAS;
+    attr.value.u32 = 1;
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.set(SAI_OBJECT_TYPE_ARS, ars, &attr));
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.remove(SAI_OBJECT_TYPE_ARS, ars));
+}
+
+TEST(Meta, quad_ars_profile)
+{
+    Meta m(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t switchId = 0;
+
+    sai_attribute_t attr;
+
+    attr.id = SAI_SWITCH_ATTR_INIT_SWITCH;
+    attr.value.booldata = true;
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_SWITCH, &switchId, SAI_NULL_OBJECT_ID, 1, &attr));
+
+    sai_object_id_t ars_profile;
+
+    std::vector<sai_attribute_t> attrs;
+
+    attr.id = SAI_ARS_PROFILE_ATTR_ALGO;
+    attr.value.u32 = SAI_ARS_PROFILE_ALGO_EWMA;
+    attrs.push_back(attr);
+
+    attr.id = SAI_ARS_PROFILE_ATTR_SAMPLING_INTERVAL;
+    attr.value.u32 = 15;
+    attrs.push_back(attr);
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.create(SAI_OBJECT_TYPE_ARS_PROFILE, &ars_profile, switchId, (uint32_t)attrs.size(), attrs.data()));
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.get(SAI_OBJECT_TYPE_ARS_PROFILE, ars_profile, (uint32_t)attrs.size(), attrs.data()));
+
+    attr.id = SAI_ARS_PROFILE_ATTR_ARS_RANDOM_SEED;
+    attr.value.u32 = 1;
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.set(SAI_OBJECT_TYPE_ARS_PROFILE, ars_profile, &attr));
+
+    EXPECT_EQ(SAI_STATUS_SUCCESS, m.remove(SAI_OBJECT_TYPE_ARS_PROFILE, ars_profile));
+}
+
+TEST(Meta, bulkGet)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_object_id_t oids[1] = {0};
+    uint32_t attrcount[1] = {0};
+    sai_attribute_t* attrs[1] = {0};
+    sai_status_t statuses[1] = {0};
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER,
+            sai.bulkGet(
+                SAI_OBJECT_TYPE_PORT,
+                1,
+                oids,
+                attrcount,
+                attrs,
+                SAI_BULK_OP_ERROR_MODE_STOP_ON_ERROR,
+                statuses));
+}
+
+TEST(Meta, remove_flow_entry)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_flow_entry_t* e = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, sai.remove(e));
+}
+
+TEST(Meta, remove_meter_bucket_entry)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_meter_bucket_entry_t* e = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, sai.remove(e));
+}
+
+TEST(Meta, remove_prefix_compression_entry)
+{
+    Meta sai(std::make_shared<MetaTestSaiInterface>());
+
+    sai_prefix_compression_entry_t* e = nullptr;
+
+    EXPECT_EQ(SAI_STATUS_INVALID_PARAMETER, sai.remove(e));
+}
+
+TEST(Meta, isPortObjectIdValid)
+{
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_PORT), true);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_BRIDGE_PORT), true);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_LAG), true);
+
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_TUNNEL),false);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_NULL), false);
+    EXPECT_EQ(Meta::isPortObjectIdValid(SAI_OBJECT_TYPE_VLAN), false);
+}
+
+TEST(Meta, getValidPortObjectTypes)
+{
+    auto v = Meta::getValidPortObjectTypes();
+
+    EXPECT_EQ(v.size(), 3);
+
+    auto s = boost::algorithm::join(v, ",");
+
+    EXPECT_EQ(s, "PORT,LAG,BRIDGE_PORT");
 }

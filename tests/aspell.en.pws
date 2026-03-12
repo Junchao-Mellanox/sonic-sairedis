@@ -3,8 +3,10 @@ acl
 ACL
 ACLs
 AES
+AIED
 API
 APIs
+ASAN
 ASIC
 ASICs
 ATTR
@@ -23,12 +25,16 @@ CreateObject
 DEI
 Decrement
 Destructor
+DPU
 EAPOL
 ECN
 EIO
 ETERM
+ecmp
+ECMP
 FDB
 FDBs
+FEC
 FIXME
 FlexCounter
 gbsyncd
@@ -46,6 +52,7 @@ IPGs
 IPv
 Inseg
 KEYs
+LLC
 LOGLEVEL
 LOOPBACK
 MACsec
@@ -53,6 +60,7 @@ MCAST
 MTU
 Mellanox
 NHG
+NPU
 OA
 OIDs
 ObjectAttrHash
@@ -75,6 +83,7 @@ SAs
 SCs
 SDK
 SGs
+SHA
 SONiC
 SRC
 STP
@@ -241,6 +250,7 @@ IPG
 ipgs
 IPGs
 ipmc
+iproute
 IPv
 isobjectid
 isoidattribute
@@ -275,6 +285,8 @@ MTU
 multicast
 mutex
 mutexes
+Nvidia
+NVIDIA
 namespace
 namespaces
 netdev
@@ -429,6 +441,7 @@ updatable
 upgradable
 util
 utils
+validonly
 versa
 veth
 vEthernetX
@@ -461,3 +474,11 @@ zmq
 ZMQ
 ZMQ
 uncreated
+TWAMP
+saiproxy
+submodule
+Enqueue
+deque
+apiversion
+vso
+VxLAN

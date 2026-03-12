@@ -46,11 +46,11 @@ ClientSai::~ClientSai()
 
     if (m_apiInitialized)
     {
-        uninitialize();
+        apiUninitialize();
     }
 }
 
-sai_status_t ClientSai::initialize(
+sai_status_t ClientSai::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
@@ -91,7 +91,7 @@ sai_status_t ClientSai::initialize(
     return SAI_STATUS_SUCCESS;
 }
 
-sai_status_t ClientSai::uninitialize(void)
+sai_status_t ClientSai::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
     REDIS_CHECK_API_INITIALIZED();
@@ -302,7 +302,7 @@ sai_status_t ClientSai::create(                                 \
     SWSS_LOG_ENTER();                                           \
     REDIS_CHECK_API_INITIALIZED();                              \
     return create(                                              \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*ot),                          \
             attr_count,                                         \
             attr_list);                                         \
@@ -318,7 +318,7 @@ sai_status_t ClientSai::remove(                                 \
     SWSS_LOG_ENTER();                                           \
     REDIS_CHECK_API_INITIALIZED();                              \
     return remove(                                              \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*ot));                         \
 }
 
@@ -333,7 +333,7 @@ sai_status_t ClientSai::set(                                    \
     SWSS_LOG_ENTER();                                           \
     REDIS_CHECK_API_INITIALIZED();                              \
     return set(                                                 \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*ot),                          \
             attr);                                              \
 }
@@ -350,13 +350,108 @@ sai_status_t ClientSai::get(                                    \
     SWSS_LOG_ENTER();                                           \
     REDIS_CHECK_API_INITIALIZED();                              \
     return get(                                                 \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*ot),                          \
             attr_count,                                         \
             attr_list);                                         \
 }
 
 SAIREDIS_DECLARE_EVERY_ENTRY(DECLARE_GET_ENTRY);
+
+#define DECLARE_BULK_CREATE_ENTRY(OT,ot)                                       \
+sai_status_t ClientSai::bulkCreate(                                            \
+        _In_ uint32_t object_count,                                            \
+        _In_ const sai_ ## ot ## _t *ot,                                       \
+        _In_ const uint32_t *attr_count,                                       \
+        _In_ const sai_attribute_t **attr_list,                                \
+        _In_ sai_bulk_op_error_mode_t mode,                                    \
+        _Out_ sai_status_t *object_statuses)                                   \
+{                                                                              \
+    MUTEX();                                                                   \
+    SWSS_LOG_ENTER();                                                          \
+    REDIS_CHECK_API_INITIALIZED();                                             \
+    static PerformanceIntervalTimer timer("ClientSai::bulkCreate(" #ot ")");   \
+    timer.start();                                                             \
+    std::vector<std::string> serialized_object_ids;                            \
+    for (uint32_t idx = 0; idx < object_count; idx++)                          \
+    {                                                                          \
+        std::string str_object_id = sai_serialize_ ##ot (ot[idx]);             \
+        serialized_object_ids.push_back(str_object_id);                        \
+    }                                                                          \
+    auto status = bulkCreate(                                                  \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,                         \
+            serialized_object_ids,                                             \
+            attr_count,                                                        \
+            attr_list,                                                         \
+            mode,                                                              \
+            object_statuses);                                                  \
+    timer.stop();                                                              \
+    timer.inc(object_count);                                                   \
+    return status;                                                             \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_CREATE_ENTRY)
+
+#define DECLARE_BULK_REMOVE_ENTRY(OT,ot)                                                                        \
+sai_status_t ClientSai::bulkRemove(                                                                             \
+        _In_ uint32_t object_count,                                                                             \
+        _In_ const sai_ ## ot ## _t *ot,                                                                        \
+        _In_ sai_bulk_op_error_mode_t mode,                                                                     \
+        _Out_ sai_status_t *object_statuses)                                                                    \
+{                                                                                                               \
+    MUTEX();                                                                                                    \
+    SWSS_LOG_ENTER();                                                                                           \
+    REDIS_CHECK_API_INITIALIZED();                                                                              \
+    std::vector<std::string> serializedObjectIds;                                                               \
+    for (uint32_t idx = 0; idx < object_count; idx++)                                                           \
+    {                                                                                                           \
+        serializedObjectIds.emplace_back(sai_serialize_ ##ot (ot[idx]));                                        \
+    }                                                                                                           \
+    return bulkRemove((sai_object_type_t)SAI_OBJECT_TYPE_ ## OT, serializedObjectIds, mode, object_statuses);   \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_REMOVE_ENTRY)
+
+#define DECLARE_BULK_SET_ENTRY(OT,ot)                                                                     \
+sai_status_t ClientSai::bulkSet(                                                                          \
+        _In_ uint32_t object_count,                                                                       \
+        _In_ const sai_ ## ot ## _t *ot,                                                                  \
+        _In_ const sai_attribute_t *attr_list,                                                            \
+        _In_ sai_bulk_op_error_mode_t mode,                                                               \
+        _Out_ sai_status_t *object_statuses)                                                              \
+{                                                                                                         \
+    MUTEX();                                                                                              \
+    SWSS_LOG_ENTER();                                                                                     \
+    REDIS_CHECK_API_INITIALIZED();                                                                        \
+    std::vector<std::string> serializedObjectIds;                                                         \
+    for (uint32_t idx = 0; idx < object_count; idx++)                                                     \
+    {                                                                                                     \
+        serializedObjectIds.emplace_back(sai_serialize_ ##ot (ot[idx]));                                  \
+    }                                                                                                     \
+    return bulkSet(SAI_OBJECT_TYPE_ROUTE_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);   \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_SET_ENTRY)
+
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t ClientSai::bulkGet(                            \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    MUTEX();                                                \
+    SWSS_LOG_ENTER();                                       \
+    REDIS_CHECK_API_INITIALIZED();                          \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY)
 
 // QUAD API HELPERS
 
@@ -739,7 +834,7 @@ sai_status_t ClientSai::waitForQueryAttributeCapabilityResponse(
 
 // QUERY ATTRIBUTE ENUM CAPABILITY
 
-sai_status_t ClientSai::queryAattributeEnumValuesCapability(
+sai_status_t ClientSai::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switchId,
         _In_ sai_object_type_t objectType,
         _In_ sai_attr_id_t attrId,
@@ -886,16 +981,6 @@ sai_status_t ClientSai::getStats(
     return waitForGetStatsResponse(number_of_counters, counters);
 }
 
-sai_status_t ClientSai::queryStatsCapability(
-        _In_ sai_object_id_t switchId,
-        _In_ sai_object_type_t objectType,
-        _Inout_ sai_stat_capability_list_t *stats_capability)
-{
-    SWSS_LOG_ENTER();
-
-    return SAI_STATUS_NOT_IMPLEMENTED;
-}
-
 sai_status_t ClientSai::waitForGetStatsResponse(
         _In_ uint32_t number_of_counters,
         _Out_ uint64_t *counters)
@@ -919,6 +1004,212 @@ sai_status_t ClientSai::waitForGetStatsResponse(
         {
             counters[idx] = stoull(fvValue(values[idx]));
         }
+    }
+
+    return status;
+}
+
+sai_status_t ClientSai::queryStatsCapability(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t objectType,
+        _Inout_ sai_stat_capability_list_t *stats_capability)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    auto switchIdStr = sai_serialize_object_id(switchId);
+    auto objectTypeStr = sai_serialize_object_type(objectType);
+
+    if (stats_capability == NULL)
+    {
+        SWSS_LOG_ERROR("Failed to find stats-capability: switch %s object type %s", switchIdStr.c_str(), objectTypeStr.c_str());
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    if (stats_capability && stats_capability->list && (stats_capability->count))
+    {
+        // clear input list, since we use serialize to transfer values
+        for (uint32_t idx = 0; idx < stats_capability->count; idx++)
+	{
+            stats_capability->list[idx].stat_enum = 0;
+            stats_capability->list[idx].stat_modes = 0;
+	}
+    }
+
+    const std::string listSize = std::to_string(stats_capability->count);
+
+    const std::vector<swss::FieldValueTuple> entry =
+    {
+        swss::FieldValueTuple("OBJECT_TYPE", objectTypeStr),
+	swss::FieldValueTuple("LIST_SIZE", listSize)
+    };
+
+    SWSS_LOG_DEBUG(
+            "Query arguments: switch %s, object type: %s, count: %s",
+            switchIdStr.c_str(),
+            objectTypeStr.c_str(),
+            listSize.c_str()
+    );
+
+    // This query will not put any data into the ASIC view, just into the
+    // message queue
+
+    m_communicationChannel->set(switchIdStr, entry, REDIS_ASIC_STATE_COMMAND_STATS_CAPABILITY_QUERY);
+
+    return waitForQueryStatsCapabilityResponse(stats_capability);
+}
+
+sai_status_t ClientSai::waitForQueryStatsCapabilityResponse(
+        _Inout_ sai_stat_capability_list_t* stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    swss::KeyOpFieldsValuesTuple kco;
+
+    auto status = m_communicationChannel->wait(REDIS_ASIC_STATE_COMMAND_STATS_CAPABILITY_RESPONSE, kco);
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 3)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 3 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const std::string &stat_enum_str = fvValue(values[0]);
+        const std::string &stat_modes_str = fvValue(values[1]);
+        const uint32_t num_capabilities = std::stoi(fvValue(values[2]));
+
+        SWSS_LOG_DEBUG("Received payload: stat_enums = '%s', stat_modes = '%s', count = %d",
+                       stat_enum_str.c_str(), stat_modes_str.c_str(), num_capabilities);
+
+        stats_capability->count = num_capabilities;
+
+        sai_deserialize_stats_capability_list(stats_capability, stat_enum_str, stat_modes_str);
+    }
+    else if (status ==  SAI_STATUS_BUFFER_OVERFLOW)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 1)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 1 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const uint32_t num_capabilities = std::stoi(fvValue(values[0]));
+
+        SWSS_LOG_DEBUG("Received payload: count = %u", num_capabilities);
+
+        stats_capability->count = num_capabilities;
+    }
+
+    return status;
+}
+
+sai_status_t ClientSai::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    auto switchIdStr = sai_serialize_object_id(switchId);
+    auto objectTypeStr = sai_serialize_object_type(objectType);
+
+    if (stats_capability == NULL)
+    {
+        SWSS_LOG_ERROR("Failed to find stats-capability: switch %s object type %s", switchIdStr.c_str(), objectTypeStr.c_str());
+        return SAI_STATUS_INVALID_PARAMETER;
+    }
+
+    if (stats_capability && stats_capability->list && (stats_capability->count))
+    {
+        // clear input list, since we use serialize to transfer values
+        for (uint32_t idx = 0; idx < stats_capability->count; idx++)
+        {
+            stats_capability->list[idx].capability.stat_enum = 0;
+            stats_capability->list[idx].capability.stat_modes = 0;
+            stats_capability->list[idx].minimal_polling_interval = 0;
+        }
+    }
+
+    const std::string listSize = std::to_string(stats_capability->count);
+
+    const std::vector<swss::FieldValueTuple> entry =
+        {
+            swss::FieldValueTuple("OBJECT_TYPE", objectTypeStr),
+            swss::FieldValueTuple("LIST_SIZE", listSize)};
+
+    SWSS_LOG_DEBUG(
+        "Query arguments: switch %s, object type: %s, count: %s",
+        switchIdStr.c_str(),
+        objectTypeStr.c_str(),
+        listSize.c_str());
+
+    // This query will not put any data into the ASIC view, just into the
+    // message queue
+
+    m_communicationChannel->set(switchIdStr, entry, REDIS_ASIC_STATE_COMMAND_STATS_ST_CAPABILITY_QUERY);
+
+    return waitForQueryStatsStCapabilityResponse(stats_capability);
+}
+
+sai_status_t ClientSai::waitForQueryStatsStCapabilityResponse(
+    _Inout_ sai_stat_st_capability_list_t *stats_capability)
+{
+    SWSS_LOG_ENTER();
+
+    swss::KeyOpFieldsValuesTuple kco;
+
+    auto status = m_communicationChannel->wait(REDIS_ASIC_STATE_COMMAND_STATS_ST_CAPABILITY_RESPONSE, kco);
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 4)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 4 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const std::string &stat_enum_str = fvValue(values[0]);
+        const std::string &stat_modes_str = fvValue(values[1]);
+        const std::string &polling_interval_str = fvValue(values[2]);
+        const uint32_t num_capabilities = std::stoi(fvValue(values[3]));
+
+        SWSS_LOG_DEBUG("Received payload: stat_enums = '%s', stat_modes = '%s', minimal_polling_intervals = '%s' count = %d",
+                       stat_enum_str.c_str(), stat_modes_str.c_str(), polling_interval_str.c_str(), num_capabilities);
+
+        stats_capability->count = num_capabilities;
+
+        sai_deserialize_stats_st_capability_list(stats_capability, stat_enum_str, stat_modes_str, polling_interval_str);
+    }
+    else if (status == SAI_STATUS_BUFFER_OVERFLOW)
+    {
+        const std::vector<swss::FieldValueTuple> &values = kfvFieldsValues(kco);
+
+        if (values.size() != 1)
+        {
+            SWSS_LOG_ERROR("Invalid response from syncd: expected 1 value, received %zu", values.size());
+
+            return SAI_STATUS_FAILURE;
+        }
+
+        const uint32_t num_capabilities = std::stoi(fvValue(values[0]));
+
+        SWSS_LOG_DEBUG("Received payload: count = %u", num_capabilities);
+
+        stats_capability->count = num_capabilities;
     }
 
     return status;
@@ -983,6 +1274,45 @@ sai_status_t ClientSai::waitForClearStatsResponse()
     return status;
 }
 
+sai_status_t ClientSai::bulkGetStats(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_key_t *object_key,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Inout_ sai_status_t *object_statuses,
+        _Out_ uint64_t *counters)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t ClientSai::bulkClearStats(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_key_t *object_key,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Inout_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    SWSS_LOG_ERROR("not implemented");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
 // BULK CREATE
 
 sai_status_t ClientSai::bulkCreate(
@@ -1040,188 +1370,6 @@ sai_status_t ClientSai::bulkCreate(
 
     return status;
 }
-
-sai_status_t ClientSai::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_route_entry_t* route_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    // TODO support mode
-
-    static PerformanceIntervalTimer timer("ClientSai::bulkCreate(route_entry)");
-
-    timer.start();
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_route_entry(route_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    auto status = bulkCreate(
-            SAI_OBJECT_TYPE_ROUTE_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-
-    timer.stop();
-
-    timer.inc(object_count);
-
-    return status;
-}
-
-sai_status_t ClientSai::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_fdb_entry_t* fdb_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    // TODO support mode
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_fdb_entry(fdb_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            SAI_OBJECT_TYPE_FDB_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
-sai_status_t ClientSai::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_inseg_entry_t* inseg_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    // TODO support mode
-
-    static PerformanceIntervalTimer timer("ClientSai::bulkCreate(inseg_entry)");
-
-    timer.start();
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_inseg_entry(inseg_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    auto status = bulkCreate(
-            SAI_OBJECT_TYPE_INSEG_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-
-    timer.stop();
-
-    timer.inc(object_count);
-
-    return status;
-}
-
-sai_status_t ClientSai::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_nat_entry_t* nat_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    // TODO support mode
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_nat_entry(nat_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            SAI_OBJECT_TYPE_NAT_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
-sai_status_t ClientSai::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_my_sid_entry_t* my_sid_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    // TODO support mode
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_my_sid_entry(my_sid_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            SAI_OBJECT_TYPE_MY_SID_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
-// BULK CREATE HELPERS
 
 sai_status_t ClientSai::bulkCreate(
         _In_ sai_object_type_t object_type,
@@ -1297,106 +1445,6 @@ sai_status_t ClientSai::bulkRemove(
     return bulkRemove(object_type, serializedObjectIds, mode, object_statuses);
 }
 
-sai_status_t ClientSai::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_route_entry_t *route_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_route_entry(route_entry[idx]));
-    }
-
-    return bulkRemove(SAI_OBJECT_TYPE_ROUTE_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_nat_entry_t *nat_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_nat_entry(nat_entry[idx]));
-    }
-
-    return bulkRemove(SAI_OBJECT_TYPE_NAT_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_inseg_entry_t *inseg_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_inseg_entry(inseg_entry[idx]));
-    }
-
-    return bulkRemove(SAI_OBJECT_TYPE_INSEG_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_fdb_entry_t *fdb_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_fdb_entry(fdb_entry[idx]));
-    }
-
-    return bulkRemove(SAI_OBJECT_TYPE_FDB_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_my_sid_entry_t *my_sid_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_my_sid_entry(my_sid_entry[idx]));
-    }
-
-    return bulkRemove(SAI_OBJECT_TYPE_MY_SID_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
 // BULK REMOVE HELPERS
 
 sai_status_t ClientSai::bulkRemove(
@@ -1463,111 +1511,6 @@ sai_status_t ClientSai::bulkSet(
     return bulkSet(object_type, serializedObjectIds, attr_list, mode, object_statuses);
 }
 
-sai_status_t ClientSai::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_route_entry_t *route_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_route_entry(route_entry[idx]));
-    }
-
-    return bulkSet(SAI_OBJECT_TYPE_ROUTE_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_nat_entry_t *nat_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_nat_entry(nat_entry[idx]));
-    }
-
-    return bulkSet(SAI_OBJECT_TYPE_NAT_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_inseg_entry_t *inseg_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_inseg_entry(inseg_entry[idx]));
-    }
-
-    return bulkSet(SAI_OBJECT_TYPE_INSEG_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_fdb_entry_t *fdb_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_fdb_entry(fdb_entry[idx]));
-    }
-
-    return bulkSet(SAI_OBJECT_TYPE_FDB_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t ClientSai::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_my_sid_entry_t *my_sid_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    MUTEX();
-    SWSS_LOG_ENTER();
-    REDIS_CHECK_API_INITIALIZED();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_my_sid_entry(my_sid_entry[idx]));
-    }
-
-    return bulkSet(SAI_OBJECT_TYPE_MY_SID_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
 // BULK SET HELPERS
 
 sai_status_t ClientSai::bulkSet(
@@ -1608,6 +1551,26 @@ sai_status_t ClientSai::bulkSet(
     m_communicationChannel->set(key, entries, REDIS_ASIC_STATE_COMMAND_BULK_SET);
 
     return waitForBulkResponse(SAI_COMMON_API_BULK_SET, (uint32_t)serialized_object_ids.size(), object_statuses);
+}
+
+// BULK GET
+
+sai_status_t ClientSai::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    SWSS_LOG_ERROR("not implemented, FIXME");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
 }
 
 // BULK RESPONSE HELPERS
@@ -1769,4 +1732,16 @@ sai_status_t ClientSai::logSet(
     SWSS_LOG_ENTER();
 
     return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t ClientSai::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    MUTEX();
+    SWSS_LOG_ENTER();
+    REDIS_CHECK_API_INITIALIZED();
+
+    SWSS_LOG_ERROR("queryApiVersion not implemented, FIXME");
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
 }

@@ -14,6 +14,10 @@
 #include "SwitchBCM56850.h"
 #include "SwitchBCM56971B0.h"
 #include "SwitchMLNX2700.h"
+#include "SwitchNvdaMBF2H536C.h"
+#ifdef USE_VPP
+#include "SwitchVpp.h"
+#endif
 
 #include <inttypes.h>
 
@@ -46,7 +50,7 @@ VirtualSwitchSaiInterface::~VirtualSwitchSaiInterface()
     // empty
 }
 
-sai_status_t VirtualSwitchSaiInterface::initialize(
+sai_status_t VirtualSwitchSaiInterface::apiInitialize(
         _In_ uint64_t flags,
         _In_ const sai_service_method_table_t *service_method_table)
 {
@@ -55,7 +59,7 @@ sai_status_t VirtualSwitchSaiInterface::initialize(
     return SAI_STATUS_SUCCESS;
 }
 
-sai_status_t VirtualSwitchSaiInterface::uninitialize(void)
+sai_status_t VirtualSwitchSaiInterface::apiUninitialize(void)
 {
     SWSS_LOG_ENTER();
 
@@ -94,7 +98,7 @@ std::shared_ptr<WarmBootState> VirtualSwitchSaiInterface::extractWarmBootState(
     return state;
 }
 
-bool VirtualSwitchSaiInterface::validate_switch_warm_boot_atributes(
+bool VirtualSwitchSaiInterface::validate_switch_warm_boot_attributes(
         _In_ uint32_t attr_count,
         _In_ const sai_attribute_t *attr_list) const
 {
@@ -412,7 +416,7 @@ sai_status_t VirtualSwitchSaiInterface::remove(                 \
     SWSS_LOG_ENTER();                                           \
     return remove(                                              \
             entry->switch_id,                                   \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*entry));                      \
 }
 
@@ -430,7 +434,7 @@ sai_status_t VirtualSwitchSaiInterface::create(                 \
     timer.start();                                              \
     auto status =  create(                                      \
             entry->switch_id,                                   \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*entry),                       \
             attr_count,                                         \
             attr_list);                                         \
@@ -449,12 +453,106 @@ sai_status_t VirtualSwitchSaiInterface::set(                    \
     SWSS_LOG_ENTER();                                           \
     return set(                                                 \
             entry->switch_id,                                   \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*entry),                       \
             attr);                                              \
 }
 
 SAIREDIS_DECLARE_EVERY_ENTRY(DECLARE_SET_ENTRY);
+
+#define DECLARE_BULK_CREATE_ENTRY(OT,ot)                              \
+sai_status_t VirtualSwitchSaiInterface::bulkCreate(                   \
+        _In_ uint32_t object_count,                                   \
+        _In_ const sai_ ## ot ## _t* ot,                              \
+        _In_ const uint32_t *attr_count,                              \
+        _In_ const sai_attribute_t **attr_list,                       \
+        _In_ sai_bulk_op_error_mode_t mode,                           \
+        _Out_ sai_status_t *object_statuses)                          \
+{                                                                     \
+    SWSS_LOG_ENTER();                                                 \
+    std::vector<std::string> serialized_object_ids;                   \
+    for (uint32_t idx = 0; idx < object_count; idx++)                 \
+    {                                                                 \
+        std::string str_object_id = sai_serialize_ ##ot (ot[idx]);    \
+        serialized_object_ids.push_back(str_object_id);               \
+    }                                                                 \
+    return bulkCreate(                                                \
+            ot->switch_id,                                            \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,                \
+            serialized_object_ids,                                    \
+            attr_count,                                               \
+            attr_list,                                                \
+            mode,                                                     \
+            object_statuses);                                         \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_CREATE_ENTRY);
+
+#define DECLARE_BULK_REMOVE_ENTRY(OT,ot)                                   \
+sai_status_t VirtualSwitchSaiInterface::bulkRemove(                        \
+        _In_ uint32_t object_count,                                        \
+        _In_ const sai_ ## ot ## _t* ot,                                   \
+        _In_ sai_bulk_op_error_mode_t mode,                                \
+        _Out_ sai_status_t *object_statuses)                               \
+{                                                                          \
+    SWSS_LOG_ENTER();                                                      \
+    std::vector<std::string> serializedObjectIds;                          \
+    for (uint32_t idx = 0; idx < object_count; idx++)                      \
+    {                                                                      \
+        serializedObjectIds.emplace_back(sai_serialize_ ##ot (ot[idx]));   \
+    }                                                                      \
+    return bulkRemove(                                                     \
+            ot->switch_id,                                                 \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,                     \
+            serializedObjectIds,                                           \
+            mode,                                                          \
+            object_statuses);                                              \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_REMOVE_ENTRY);
+
+#define DECLARE_BULK_SET_ENTRY(OT,ot)                                      \
+sai_status_t VirtualSwitchSaiInterface::bulkSet(                           \
+        _In_ uint32_t object_count,                                        \
+        _In_ const sai_ ## ot ## _t* ot,                                   \
+        _In_ const sai_attribute_t *attr_list,                             \
+        _In_ sai_bulk_op_error_mode_t mode,                                \
+        _Out_ sai_status_t *object_statuses)                               \
+{                                                                          \
+    SWSS_LOG_ENTER();                                                      \
+    std::vector<std::string> serializedObjectIds;                          \
+    for (uint32_t idx = 0; idx < object_count; idx++)                      \
+    {                                                                      \
+        serializedObjectIds.emplace_back(sai_serialize_ ##ot (ot[idx]));   \
+    }                                                                      \
+    return bulkSet(                                                        \
+            ot->switch_id,                                                 \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,                     \
+            serializedObjectIds,                                           \
+            attr_list,                                                     \
+            mode,                                                          \
+            object_statuses);                                              \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_SET_ENTRY);
+
+// BULK GET
+
+#define DECLARE_BULK_GET_ENTRY(OT,ot)                       \
+sai_status_t VirtualSwitchSaiInterface::bulkGet(            \
+        _In_ uint32_t object_count,                         \
+        _In_ const sai_ ## ot ## _t *ot,                    \
+        _In_ const uint32_t *attr_count,                    \
+        _Inout_ sai_attribute_t **attr_list,                \
+        _In_ sai_bulk_op_error_mode_t mode,                 \
+        _Out_ sai_status_t *object_statuses)                \
+{                                                           \
+    SWSS_LOG_ENTER();                                       \
+    SWSS_LOG_ERROR("FIXME not implemented");                \
+    return SAI_STATUS_NOT_IMPLEMENTED;                      \
+}
+
+SAIREDIS_DECLARE_EVERY_BULK_ENTRY(DECLARE_BULK_GET_ENTRY);
 
 std::shared_ptr<SwitchStateBase> VirtualSwitchSaiInterface::init_switch(
         _In_ sai_object_id_t switch_id,
@@ -500,6 +598,21 @@ std::shared_ptr<SwitchStateBase> VirtualSwitchSaiInterface::init_switch(
             m_switchStateMap[switch_id] = std::make_shared<SwitchMLNX2700>(switch_id, m_realObjectIdManager, config, warmBootState);
 
             break;
+
+        case SAI_VS_SWITCH_TYPE_NVDA_MBF2H536C:
+
+            m_switchStateMap[switch_id] = std::make_shared<SwitchNvdaMBF2H536C>(switch_id, m_realObjectIdManager, config, warmBootState);
+            break;
+
+        case SAI_VS_SWITCH_TYPE_VPP:
+
+#ifdef USE_VPP
+            m_switchStateMap[switch_id] = std::make_shared<SwitchVpp>(switch_id, m_realObjectIdManager, config, warmBootState);
+            break;
+#else
+            SWSS_LOG_WARN("vslib not compiled with vpp");
+            return nullptr;
+#endif
 
         default:
 
@@ -568,7 +681,7 @@ sai_status_t VirtualSwitchSaiInterface::create(
 
         if (config->m_bootType == SAI_VS_BOOT_TYPE_WARM)
         {
-            if (!validate_switch_warm_boot_atributes(attr_count, attr_list))
+            if (!validate_switch_warm_boot_attributes(attr_count, attr_list))
             {
                 SWSS_LOG_ERROR("invalid attribute passed during warm boot");
 
@@ -715,7 +828,7 @@ sai_status_t VirtualSwitchSaiInterface::get(                    \
     SWSS_LOG_ENTER();                                           \
     return get(                                                 \
             entry->switch_id,                                   \
-            SAI_OBJECT_TYPE_ ## OT,                             \
+            (sai_object_type_t)SAI_OBJECT_TYPE_ ## OT,          \
             sai_serialize_ ## ot(*entry),                       \
             attr_count,                                         \
             attr_list);                                         \
@@ -765,6 +878,19 @@ sai_status_t VirtualSwitchSaiInterface::objectTypeGetAvailability(
         *count = 512;
         return SAI_STATUS_SUCCESS;
     }
+    else if ((objectType == (sai_object_type_t)SAI_OBJECT_TYPE_VNET) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_ENI) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_ENI_ETHER_ADDRESS_MAP_ENTRY) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_INBOUND_ROUTING_ENTRY) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_OUTBOUND_ROUTING_ENTRY) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_PA_VALIDATION_ENTRY) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_OUTBOUND_CA_TO_PA_ENTRY) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_DASH_ACL_GROUP) ||
+             (objectType == (sai_object_type_t)SAI_OBJECT_TYPE_DASH_ACL_RULE))
+    {
+        *count = 100000;
+        return SAI_STATUS_SUCCESS;
+    }
 
     return SAI_STATUS_NOT_SUPPORTED;
 }
@@ -777,19 +903,11 @@ sai_status_t VirtualSwitchSaiInterface::queryAttributeCapability(
 {
     SWSS_LOG_ENTER();
 
-    // TODO: We should generate this metadata for the virtual switch rather
-    // than hard-coding it here.
-
-    // in virtual switch by default all apis are implemented for all objects. SUCCESS for all attributes
-
-    capability->create_implemented = true;
-    capability->set_implemented    = true;
-    capability->get_implemented    = true;
-
-    return SAI_STATUS_SUCCESS;
+    auto ss = m_switchStateMap.at(switch_id);
+    return ss->queryAttributeCapability(switch_id, object_type, attr_id, capability);
 }
 
-sai_status_t VirtualSwitchSaiInterface::queryAattributeEnumValuesCapability(
+sai_status_t VirtualSwitchSaiInterface::queryAttributeEnumValuesCapability(
         _In_ sai_object_id_t switch_id,
         _In_ sai_object_type_t object_type,
         _In_ sai_attr_id_t attr_id,
@@ -885,10 +1003,181 @@ sai_status_t VirtualSwitchSaiInterface::queryStatsCapability(
 
     auto ss = m_switchStateMap.at(switchId);
 
+
+    if (objectType == SAI_OBJECT_TYPE_QUEUE)
+    {
+        if (stats_capability->count < SAI_OBJECT_TYPE_QUEUE)
+        {
+            stats_capability->count = SAI_QUEUE_STAT_DELAY_WATERMARK_NS;
+            return SAI_STATUS_BUFFER_OVERFLOW;
+        }
+
+        stats_capability->count = SAI_QUEUE_STAT_DELAY_WATERMARK_NS;
+
+        for(uint32_t i = 0; i < stats_capability->count; i++)
+        {
+            stats_capability->list[i].stat_modes = SAI_STATS_MODE_READ_AND_CLEAR | SAI_STATS_MODE_READ;
+            stats_capability->list[i].stat_enum = i;
+        }
+
+        return SAI_STATUS_SUCCESS;
+    }
+    else if (objectType == SAI_OBJECT_TYPE_PORT)
+    {
+        if (stats_capability->count < 91)
+        {
+            stats_capability->count = 91;
+            return SAI_STATUS_BUFFER_OVERFLOW;
+        }
+
+        stats_capability->count = 91;
+        stats_capability->list[0].stat_enum = SAI_PORT_STAT_IF_IN_OCTETS;
+        stats_capability->list[1].stat_enum = SAI_PORT_STAT_IF_IN_UCAST_PKTS;
+        stats_capability->list[2].stat_enum = SAI_PORT_STAT_IF_IN_NON_UCAST_PKTS;
+        stats_capability->list[3].stat_enum = SAI_PORT_STAT_IF_IN_DISCARDS;
+        stats_capability->list[4].stat_enum = SAI_PORT_STAT_IF_IN_ERRORS;
+        stats_capability->list[5].stat_enum = SAI_PORT_STAT_IF_IN_UNKNOWN_PROTOS;
+        stats_capability->list[6].stat_enum = SAI_PORT_STAT_IF_IN_BROADCAST_PKTS;
+        stats_capability->list[7].stat_enum = SAI_PORT_STAT_IF_IN_MULTICAST_PKTS;
+        stats_capability->list[8].stat_enum = SAI_PORT_STAT_IF_IN_VLAN_DISCARDS;
+        stats_capability->list[9].stat_enum = SAI_PORT_STAT_IF_OUT_OCTETS;
+        stats_capability->list[10].stat_enum = SAI_PORT_STAT_IF_OUT_UCAST_PKTS;
+        stats_capability->list[11].stat_enum = SAI_PORT_STAT_IF_OUT_NON_UCAST_PKTS;
+        stats_capability->list[12].stat_enum = SAI_PORT_STAT_IF_OUT_DISCARDS;
+        stats_capability->list[13].stat_enum = SAI_PORT_STAT_IF_OUT_ERRORS;
+        stats_capability->list[14].stat_enum = SAI_PORT_STAT_IF_OUT_QLEN;
+        stats_capability->list[15].stat_enum = SAI_PORT_STAT_IF_OUT_BROADCAST_PKTS;
+        stats_capability->list[16].stat_enum = SAI_PORT_STAT_IF_OUT_MULTICAST_PKTS;
+        stats_capability->list[17].stat_enum = SAI_PORT_STAT_ETHER_STATS_DROP_EVENTS;
+        stats_capability->list[18].stat_enum = SAI_PORT_STAT_ETHER_STATS_MULTICAST_PKTS;
+        stats_capability->list[19].stat_enum = SAI_PORT_STAT_ETHER_STATS_BROADCAST_PKTS;
+        stats_capability->list[20].stat_enum = SAI_PORT_STAT_ETHER_STATS_UNDERSIZE_PKTS;
+        stats_capability->list[21].stat_enum = SAI_PORT_STAT_ETHER_STATS_FRAGMENTS;
+        stats_capability->list[22].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_64_OCTETS;
+        stats_capability->list[23].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_65_TO_127_OCTETS;
+        stats_capability->list[24].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_128_TO_255_OCTETS;
+        stats_capability->list[25].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_256_TO_511_OCTETS;
+        stats_capability->list[26].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_512_TO_1023_OCTETS;
+        stats_capability->list[27].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_1024_TO_1518_OCTETS;
+        stats_capability->list[28].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_1519_TO_2047_OCTETS;
+        stats_capability->list[29].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_2048_TO_4095_OCTETS;
+        stats_capability->list[30].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_4096_TO_9216_OCTETS;
+        stats_capability->list[31].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS_9217_TO_16383_OCTETS;
+        stats_capability->list[32].stat_enum = SAI_PORT_STAT_ETHER_STATS_OVERSIZE_PKTS;
+        stats_capability->list[33].stat_enum = SAI_PORT_STAT_ETHER_RX_OVERSIZE_PKTS;
+        stats_capability->list[34].stat_enum = SAI_PORT_STAT_ETHER_TX_OVERSIZE_PKTS;
+        stats_capability->list[35].stat_enum = SAI_PORT_STAT_ETHER_STATS_JABBERS;
+        stats_capability->list[36].stat_enum = SAI_PORT_STAT_ETHER_STATS_OCTETS;
+        stats_capability->list[37].stat_enum = SAI_PORT_STAT_ETHER_STATS_PKTS;
+        stats_capability->list[38].stat_enum = SAI_PORT_STAT_ETHER_STATS_COLLISIONS;
+        stats_capability->list[39].stat_enum = SAI_PORT_STAT_ETHER_STATS_CRC_ALIGN_ERRORS;
+        stats_capability->list[40].stat_enum = SAI_PORT_STAT_ETHER_STATS_TX_NO_ERRORS;
+        stats_capability->list[41].stat_enum = SAI_PORT_STAT_ETHER_STATS_RX_NO_ERRORS;
+        stats_capability->list[42].stat_enum = SAI_PORT_STAT_GREEN_WRED_DROPPED_PACKETS;
+        stats_capability->list[43].stat_enum = SAI_PORT_STAT_GREEN_WRED_DROPPED_BYTES;
+        stats_capability->list[44].stat_enum = SAI_PORT_STAT_YELLOW_WRED_DROPPED_PACKETS;
+        stats_capability->list[45].stat_enum = SAI_PORT_STAT_YELLOW_WRED_DROPPED_BYTES;
+        stats_capability->list[46].stat_enum = SAI_PORT_STAT_RED_WRED_DROPPED_PACKETS;
+        stats_capability->list[47].stat_enum = SAI_PORT_STAT_RED_WRED_DROPPED_BYTES;
+        stats_capability->list[48].stat_enum = SAI_PORT_STAT_WRED_DROPPED_PACKETS;
+        stats_capability->list[49].stat_enum = SAI_PORT_STAT_WRED_DROPPED_BYTES;
+        stats_capability->list[50].stat_enum = SAI_PORT_STAT_ECN_MARKED_PACKETS;
+        stats_capability->list[51].stat_enum = SAI_PORT_STAT_PFC_0_RX_PKTS;
+        stats_capability->list[52].stat_enum = SAI_PORT_STAT_PFC_0_TX_PKTS;
+        stats_capability->list[53].stat_enum = SAI_PORT_STAT_PFC_1_RX_PKTS;
+        stats_capability->list[54].stat_enum = SAI_PORT_STAT_PFC_1_TX_PKTS;
+        stats_capability->list[55].stat_enum = SAI_PORT_STAT_PFC_2_RX_PKTS;
+        stats_capability->list[56].stat_enum = SAI_PORT_STAT_PFC_2_TX_PKTS;
+        stats_capability->list[57].stat_enum = SAI_PORT_STAT_PFC_3_RX_PKTS;
+        stats_capability->list[58].stat_enum = SAI_PORT_STAT_PFC_3_TX_PKTS;
+        stats_capability->list[59].stat_enum = SAI_PORT_STAT_PFC_4_RX_PKTS;
+        stats_capability->list[60].stat_enum = SAI_PORT_STAT_PFC_4_TX_PKTS;
+        stats_capability->list[61].stat_enum = SAI_PORT_STAT_PFC_5_RX_PKTS;
+        stats_capability->list[62].stat_enum = SAI_PORT_STAT_PFC_5_TX_PKTS;
+        stats_capability->list[63].stat_enum = SAI_PORT_STAT_PFC_6_RX_PKTS;
+        stats_capability->list[64].stat_enum = SAI_PORT_STAT_PFC_6_TX_PKTS;
+        stats_capability->list[65].stat_enum = SAI_PORT_STAT_PFC_7_RX_PKTS;
+        stats_capability->list[66].stat_enum = SAI_PORT_STAT_PFC_7_TX_PKTS;
+        stats_capability->list[67].stat_enum = SAI_PORT_STAT_PFC_0_RX_PAUSE_DURATION_US;
+        stats_capability->list[68].stat_enum = SAI_PORT_STAT_PFC_0_TX_PAUSE_DURATION_US;
+        stats_capability->list[69].stat_enum = SAI_PORT_STAT_PFC_1_RX_PAUSE_DURATION_US;
+        stats_capability->list[70].stat_enum = SAI_PORT_STAT_PFC_1_TX_PAUSE_DURATION_US;
+        stats_capability->list[71].stat_enum = SAI_PORT_STAT_PFC_2_RX_PAUSE_DURATION_US;
+        stats_capability->list[72].stat_enum = SAI_PORT_STAT_PFC_2_TX_PAUSE_DURATION_US;
+        stats_capability->list[73].stat_enum = SAI_PORT_STAT_PFC_3_RX_PAUSE_DURATION_US;
+        stats_capability->list[74].stat_enum = SAI_PORT_STAT_PFC_3_TX_PAUSE_DURATION_US;
+        stats_capability->list[75].stat_enum = SAI_PORT_STAT_PFC_4_RX_PAUSE_DURATION_US;
+        stats_capability->list[76].stat_enum = SAI_PORT_STAT_PFC_4_TX_PAUSE_DURATION_US;
+        stats_capability->list[77].stat_enum = SAI_PORT_STAT_PFC_5_RX_PAUSE_DURATION_US;
+        stats_capability->list[78].stat_enum = SAI_PORT_STAT_PFC_5_TX_PAUSE_DURATION_US;
+        stats_capability->list[79].stat_enum = SAI_PORT_STAT_PFC_6_RX_PAUSE_DURATION_US;
+        stats_capability->list[80].stat_enum = SAI_PORT_STAT_PFC_6_TX_PAUSE_DURATION_US;
+        stats_capability->list[81].stat_enum = SAI_PORT_STAT_PFC_7_RX_PAUSE_DURATION_US;
+        stats_capability->list[82].stat_enum = SAI_PORT_STAT_PFC_7_TX_PAUSE_DURATION_US;
+        stats_capability->list[83].stat_enum = SAI_PORT_STAT_PFC_0_ON2OFF_RX_PKTS;
+        stats_capability->list[84].stat_enum = SAI_PORT_STAT_PFC_1_ON2OFF_RX_PKTS;
+        stats_capability->list[85].stat_enum = SAI_PORT_STAT_PFC_2_ON2OFF_RX_PKTS;
+        stats_capability->list[86].stat_enum = SAI_PORT_STAT_PFC_3_ON2OFF_RX_PKTS;
+        stats_capability->list[87].stat_enum = SAI_PORT_STAT_PFC_4_ON2OFF_RX_PKTS;
+        stats_capability->list[88].stat_enum = SAI_PORT_STAT_PFC_5_ON2OFF_RX_PKTS;
+        stats_capability->list[89].stat_enum = SAI_PORT_STAT_PFC_6_ON2OFF_RX_PKTS;
+        stats_capability->list[90].stat_enum = SAI_PORT_STAT_PFC_7_ON2OFF_RX_PKTS;
+        for(uint32_t i = 0; i < stats_capability->count; i++)
+        {
+            stats_capability->list[i].stat_modes = SAI_STATS_MODE_READ_AND_CLEAR | SAI_STATS_MODE_READ ;
+        }
+
+        return SAI_STATUS_SUCCESS;
+    }
+
     return ss->queryStatsCapability(
             switchId,
             objectType,
             stats_capability);
+}
+
+sai_status_t VirtualSwitchSaiInterface::queryStatsStCapability(
+    _In_ sai_object_id_t switchId,
+    _In_ sai_object_type_t objectType,
+    _Inout_ sai_stat_st_capability_list_t *stats_st_capability)
+{
+    SWSS_LOG_ENTER();
+
+    sai_stat_capability_list_t stats_capability;
+    std::vector<sai_stat_capability_t> stats_list(stats_st_capability->count);
+    stats_capability.count = stats_st_capability->count;
+    stats_capability.list = stats_list.data();
+
+    sai_status_t status = queryStatsCapability(
+        switchId,
+        objectType,
+        &stats_capability);
+
+    if (status == SAI_STATUS_SUCCESS)
+    {
+        stats_st_capability->count = stats_capability.count;
+        for (uint32_t i = 0; i < stats_capability.count; i++)
+        {
+            stats_st_capability->list[i].capability.stat_enum = stats_capability.list[i].stat_enum;
+            stats_st_capability->list[i].capability.stat_modes = stats_capability.list[i].stat_modes;
+            stats_st_capability->list[i].minimal_polling_interval = static_cast<uint64_t>(1e6 * 100); // 100ms
+        }
+    }
+    else if (status == SAI_STATUS_BUFFER_OVERFLOW)
+    {
+        stats_st_capability->count = stats_capability.count;
+        SWSS_LOG_WARN("Buffer overflow for object type %s, count: %u",
+                      sai_serialize_object_type(objectType).c_str(),
+                      stats_st_capability->count);
+    }
+    else
+    {
+        SWSS_LOG_WARN("Failed to query stats capability for object type %s, status: %s",
+                      sai_serialize_object_type(objectType).c_str(),
+                      sai_serialize_status(status).c_str());
+    }
+
+    return status;
 }
 
 sai_status_t VirtualSwitchSaiInterface::getStatsExt(
@@ -961,6 +1250,37 @@ sai_status_t VirtualSwitchSaiInterface::clearStats(
             counters);
 }
 
+sai_status_t VirtualSwitchSaiInterface::bulkGetStats(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_key_t *object_key,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Inout_ sai_status_t *object_statuses,
+        _Out_ uint64_t *counters)
+{
+    SWSS_LOG_ENTER();
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
+sai_status_t VirtualSwitchSaiInterface::bulkClearStats(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_key_t *object_key,
+        _In_ uint32_t number_of_counters,
+        _In_ const sai_stat_id_t *counter_ids,
+        _In_ sai_stats_mode_t mode,
+        _Inout_ sai_status_t *object_statuses)
+{
+    SWSS_LOG_ENTER();
+
+    return SAI_STATUS_NOT_IMPLEMENTED;
+}
+
 sai_status_t VirtualSwitchSaiInterface::bulkRemove(
         _In_ sai_object_id_t switchId,
         _In_ sai_object_type_t object_type,
@@ -996,96 +1316,6 @@ sai_status_t VirtualSwitchSaiInterface::bulkRemove(
     return bulkRemove(switchId, object_type, serializedObjectIds, mode, object_statuses);
 }
 
-sai_status_t VirtualSwitchSaiInterface::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_route_entry_t *route_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_route_entry(route_entry[idx]));
-    }
-
-    return bulkRemove(route_entry->switch_id, SAI_OBJECT_TYPE_ROUTE_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_my_sid_entry_t *my_sid_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_my_sid_entry(my_sid_entry[idx]));
-    }
-
-    return bulkRemove(my_sid_entry->switch_id, SAI_OBJECT_TYPE_MY_SID_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_nat_entry_t *nat_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_nat_entry(nat_entry[idx]));
-    }
-
-    return bulkRemove(nat_entry->switch_id, SAI_OBJECT_TYPE_NAT_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_inseg_entry_t *inseg_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_inseg_entry(inseg_entry[idx]));
-    }
-
-    return bulkRemove(inseg_entry->switch_id, SAI_OBJECT_TYPE_INSEG_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkRemove(
-        _In_ uint32_t object_count,
-        _In_ const sai_fdb_entry_t *fdb_entry,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_fdb_entry(fdb_entry[idx]));
-    }
-
-    return bulkRemove(fdb_entry->switch_id, SAI_OBJECT_TYPE_FDB_ENTRY, serializedObjectIds, mode, object_statuses);
-}
-
 sai_status_t VirtualSwitchSaiInterface::bulkSet(
         _In_ sai_object_type_t object_type,
         _In_ uint32_t object_count,
@@ -1109,101 +1339,6 @@ sai_status_t VirtualSwitchSaiInterface::bulkSet(
 }
 
 sai_status_t VirtualSwitchSaiInterface::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_route_entry_t *route_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_route_entry(route_entry[idx]));
-    }
-
-    return bulkSet(route_entry->switch_id, SAI_OBJECT_TYPE_ROUTE_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_my_sid_entry_t *my_sid_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_my_sid_entry(my_sid_entry[idx]));
-    }
-
-    return bulkSet(my_sid_entry->switch_id, SAI_OBJECT_TYPE_MY_SID_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_nat_entry_t *nat_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_nat_entry(nat_entry[idx]));
-    }
-
-    return bulkSet(nat_entry->switch_id, SAI_OBJECT_TYPE_NAT_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_inseg_entry_t *inseg_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_inseg_entry(inseg_entry[idx]));
-    }
-
-    return bulkSet(inseg_entry->switch_id, SAI_OBJECT_TYPE_INSEG_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkSet(
-        _In_ uint32_t object_count,
-        _In_ const sai_fdb_entry_t *fdb_entry,
-        _In_ const sai_attribute_t *attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serializedObjectIds;
-
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        serializedObjectIds.emplace_back(sai_serialize_fdb_entry(fdb_entry[idx]));
-    }
-
-    return bulkSet(fdb_entry->switch_id, SAI_OBJECT_TYPE_FDB_ENTRY, serializedObjectIds, attr_list, mode, object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkSet(
         _In_ sai_object_id_t switchId,
         _In_ sai_object_type_t object_type,
         _In_ const std::vector<std::string> &serialized_object_ids,
@@ -1218,6 +1353,46 @@ sai_status_t VirtualSwitchSaiInterface::bulkSet(
     return ss->bulkSet(object_type, serialized_object_ids, attr_list, mode, object_statuses);
 }
 
+sai_status_t VirtualSwitchSaiInterface::bulkGet(
+        _In_ sai_object_type_t object_type,
+        _In_ uint32_t object_count,
+        _In_ const sai_object_id_t *object_id,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    SWSS_LOG_ENTER();
+
+    std::vector<std::string> serializedObjectIds;
+
+    for (uint32_t idx = 0; idx < object_count; idx++)
+    {
+        serializedObjectIds.emplace_back(sai_serialize_object_id(object_id[idx]));
+    }
+
+    // Get switch ID from the first object ID, assuming all objects are within the same switch.
+    auto switchId = switchIdQuery(*object_id);
+
+    return bulkGet(switchId, object_type, serializedObjectIds, attr_count, attr_list, mode, object_statuses);
+}
+
+sai_status_t VirtualSwitchSaiInterface::bulkGet(
+        _In_ sai_object_id_t switchId,
+        _In_ sai_object_type_t object_type,
+        _In_ const std::vector<std::string> &serialized_object_ids,
+        _In_ const uint32_t *attr_count,
+        _Inout_ sai_attribute_t **attr_list,
+        _In_ sai_bulk_op_error_mode_t mode,
+        _Out_ sai_status_t *object_statuses)
+{
+    SWSS_LOG_ENTER();
+
+    auto ss = m_switchStateMap.at(switchId);
+
+    return ss->bulkGet(object_type, serialized_object_ids, attr_count, attr_list, mode, object_statuses);
+}
+
 sai_status_t VirtualSwitchSaiInterface::bulkCreate(
         _In_ sai_object_type_t object_type,
         _In_ sai_object_id_t switch_id,
@@ -1230,11 +1405,18 @@ sai_status_t VirtualSwitchSaiInterface::bulkCreate(
 {
     SWSS_LOG_ENTER();
 
+    // create new real object IDs
+    for (uint32_t idx = 0; idx < object_count; idx++)
+    {
+        object_id[idx] = m_realObjectIdManager->allocateNewObjectId(object_type, switch_id);
+    }
+
     std::vector<std::string> serialized_object_ids;
 
     // on create vid is put in db by syncd
     for (uint32_t idx = 0; idx < object_count; idx++)
     {
+        object_id[idx] = m_realObjectIdManager->allocateNewObjectId(object_type, switch_id);
         std::string str_object_id = sai_serialize_object_id(object_id[idx]);
         serialized_object_ids.push_back(str_object_id);
     }
@@ -1265,151 +1447,6 @@ sai_status_t VirtualSwitchSaiInterface::bulkCreate(
     return ss->bulkCreate(switchId, object_type, serialized_object_ids, attr_count, attr_list, mode, object_statuses);;
 }
 
-sai_status_t VirtualSwitchSaiInterface::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_route_entry_t* route_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_route_entry(route_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            route_entry->switch_id,
-            SAI_OBJECT_TYPE_ROUTE_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_fdb_entry_t* fdb_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_fdb_entry(fdb_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            fdb_entry->switch_id,
-            SAI_OBJECT_TYPE_FDB_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_inseg_entry_t* inseg_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_inseg_entry(inseg_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            inseg_entry->switch_id,
-            SAI_OBJECT_TYPE_INSEG_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_my_sid_entry_t* my_sid_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_my_sid_entry(my_sid_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            my_sid_entry->switch_id,
-            SAI_OBJECT_TYPE_MY_SID_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
-sai_status_t VirtualSwitchSaiInterface::bulkCreate(
-        _In_ uint32_t object_count,
-        _In_ const sai_nat_entry_t* nat_entry,
-        _In_ const uint32_t *attr_count,
-        _In_ const sai_attribute_t **attr_list,
-        _In_ sai_bulk_op_error_mode_t mode,
-        _Out_ sai_status_t *object_statuses)
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<std::string> serialized_object_ids;
-
-    // on create vid is put in db by syncd
-    for (uint32_t idx = 0; idx < object_count; idx++)
-    {
-        std::string str_object_id = sai_serialize_nat_entry(nat_entry[idx]);
-        serialized_object_ids.push_back(str_object_id);
-    }
-
-    return bulkCreate(
-            nat_entry->switch_id,
-            SAI_OBJECT_TYPE_NAT_ENTRY,
-            serialized_object_ids,
-            attr_count,
-            attr_list,
-            mode,
-            object_statuses);
-}
-
 sai_object_type_t VirtualSwitchSaiInterface::objectTypeQuery(
         _In_ sai_object_id_t objectId)
 {
@@ -1433,6 +1470,23 @@ sai_status_t VirtualSwitchSaiInterface::logSet(
     SWSS_LOG_ENTER();
 
     return SAI_STATUS_SUCCESS;
+}
+
+sai_status_t VirtualSwitchSaiInterface::queryApiVersion(
+        _Out_ sai_api_version_t *version)
+{
+    SWSS_LOG_ENTER();
+
+    if (version)
+    {
+        *version = SAI_API_VERSION;
+
+        return SAI_STATUS_SUCCESS;
+    }
+
+    SWSS_LOG_ERROR("version parameter is NULL");
+
+    return SAI_STATUS_INVALID_PARAMETER;
 }
 
 bool VirtualSwitchSaiInterface::writeWarmBootFile(

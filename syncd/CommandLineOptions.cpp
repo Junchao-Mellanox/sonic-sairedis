@@ -34,6 +34,8 @@ CommandLineOptions::CommandLineOptions()
 
     m_breakConfig = "";
 
+    m_watchdogWarnTimeSpan = 30 * 1000000;
+
 #ifdef SAITHRIFT
 
     m_runRPCServer = false;
@@ -42,6 +44,9 @@ CommandLineOptions::CommandLineOptions()
 
 #endif // SAITHRIFT
 
+    m_supportingBulkCounterGroups = "";
+
+    m_enableAttrVersionCheck = false;
 }
 
 std::string CommandLineOptions::getCommandLineString() const
@@ -63,6 +68,9 @@ std::string CommandLineOptions::getCommandLineString() const
     ss << " GlobalContext=" << m_globalContext;
     ss << " ContextConfig=" << m_contextConfig;
     ss << " BreakConfig=" << m_breakConfig;
+    ss << " WatchdogWarnTimeSpan=" << m_watchdogWarnTimeSpan;
+    ss << " SupportingBulkCounters=" << m_supportingBulkCounterGroups;
+    ss << " EnableAttrVersionCheck=" << (m_enableAttrVersionCheck ? "YES" : "NO");
 
 #ifdef SAITHRIFT
 
@@ -91,6 +99,9 @@ sai_start_type_t CommandLineOptions::startTypeStringToStartType(
     if (startType == STRING_SAI_START_TYPE_FASTFAST_BOOT)
         return SAI_START_TYPE_FASTFAST_BOOT;
 
+    if (startType == STRING_SAI_START_TYPE_EXPRESS_BOOT)
+        return SAI_START_TYPE_EXPRESS_BOOT;
+
     if (startType == STRING_SAI_START_TYPE_UNKNOWN)
         return SAI_START_TYPE_UNKNOWN;
 
@@ -117,6 +128,9 @@ std::string CommandLineOptions::startTypeToString(
 
         case SAI_START_TYPE_FASTFAST_BOOT:
             return STRING_SAI_START_TYPE_FASTFAST_BOOT;
+
+        case SAI_START_TYPE_EXPRESS_BOOT:
+            return STRING_SAI_START_TYPE_EXPRESS_BOOT;
 
         case SAI_START_TYPE_UNKNOWN:
             return STRING_SAI_START_TYPE_UNKNOWN;
